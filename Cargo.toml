@@ -1,0 +1,32 @@
+[package]
+name = "penumbra-installer"
+version = "0.1.0"
+edition = "2021"
+description = "Generic Android installer via ADB for GitHub-based projects"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/PenumbraOS/installer"
+
+[[bin]]
+name = "penumbra"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { version = "1.0", features = ["full"] }
+reqwest = { version = "0.11", features = ["json"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.9"
+serde_json = "1.0"
+thiserror = "1.0"
+clap = { version = "4.0", features = ["derive"] }
+adb_client = { git = "https://github.com/PenumbraOS/adb_remote_auth" }
+glob = "0.3"
+dirs = "5.0"
+env_logger = "0.10"
+
+# For future WASM support
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+
+[dev-dependencies]
+tempfile = "3.0"
+tokio-test = "0.4"

@@ -1,0 +1,424 @@
+use glob::glob;
+use std::path::{Path, PathBuf};
+use tokio::fs;
+
+use crate::adb::AdbManager;
+use crate::github::GitHubClient;
+use crate::platform::Platform;
+use crate::{
+    CleanupStep, FilePush, InstallConfig, InstallStep, InstallerError, Repository, Result,
+};
+
+pub struct InstallationEngine {
+    config: InstallConfig,
+    github: GitHubClient,
+    adb: AdbManager,
+    temp_dir: PathBuf,
+}
+
+impl InstallationEngine {
+    pub async fn new(config: InstallConfig) -> Result<Self> {
+        let temp_dir = Platform::temp_dir();
+        fs::create_dir_all(&temp_dir).await?;
+
+        let github = GitHubClient::new();
+        let adb = AdbManager::connect().await?;
+
+        Ok(Self {
+            config,
+            github,
+            adb,
+            temp_dir,
+        })
+    }
+
+    pub async fn install(&mut self, repo_filter: Option<&[String]>) -> Result<()> {
+        println!("Starting {} installation", self.config.name);
+
+        if !self.config.global_setup.is_empty() {
+            println!("Running global setup");
+            let global_setup = self.config.global_setup.clone();
+            for step in &global_setup {
+                self.execute_install_step(step, "global").await?;
+            }
+        }
+
+        let repos_to_install: Vec<_> = if let Some(filter) = repo_filter {
+            self.config
+                .filter_repositories(filter)?
+                .into_iter()
+                .cloned()
+                .collect()
+        } else {
+            self.config.repositories.clone()
+        };
+
+        if repos_to_install.is_empty() {
+            return Err(InstallerError::NoRepositoriesFound);
+        }
+
+        println!("Installing {} repositories", repos_to_install.len());
+
+        for repo in &repos_to_install {
+            println!("\n--- Installing repository: {} ---", repo.name);
+            self.install_repository(repo).await?;
+        }
+
+        println!("Cleaning up temporary files");
+        fs::remove_dir_all(&self.temp_dir).await?;
+
+        println!("Installation complete");
+        Ok(())
+    }
+
+    async fn install_repository(&mut self, repo: &Repository) -> Result<()> {
+        let version = self.github.get_version(repo).await?;
+        println!("   Version: {}", version);
+
+        let repo_temp_dir = self.temp_dir.join(&repo.name);
+        fs::create_dir_all(&repo_temp_dir).await?;
+
+        let exclude_patterns = self.get_exclusion_patterns(repo);
+
+        println!("   Downloading release assets");
+        for pattern in &repo.release_assets {
+            let downloaded = self
+                .github
+                .download_asset(&repo.owner, &repo.repo, &version, pattern, &repo_temp_dir)
+                .await?;
+
+            self.filter_downloaded_assets(&downloaded, &exclude_patterns).await?;
+
+            let remaining_count = self.count_remaining_assets(&downloaded, &exclude_patterns)?;
+            if remaining_count == 0 {
+                println!("   No release assets will be installed for pattern: {}", pattern);
+            }
+        }
+
+        for filepath in &repo.repo_files {
+            println!("   Downloading repository file: {}", filepath);
+            if filepath.contains('*') {
+                self.github
+                    .download_file(&repo.owner, &repo.repo, &version, filepath, &repo_temp_dir)
+                    .await?;
+            } else {
+                let dest = repo_temp_dir.join(Path::new(filepath).file_name().unwrap());
+                self.github
+                    .download_file(&repo.owner, &repo.repo, &version, filepath, &dest)
+                    .await?;
+            }
+        }
+
+        if !repo.cleanup.is_empty() {
+            println!("   Running cleanup");
+            for cleanup in &repo.cleanup {
+                self.execute_cleanup_step(cleanup).await?;
+            }
+        }
+
+        println!("   Running installation steps");
+        for step in &repo.installation {
+            self.execute_install_step(step, &repo.name).await?;
+        }
+
+        println!("   {} installation complete", repo.name);
+        Ok(())
+    }
+
+    async fn execute_cleanup_step(&mut self, step: &CleanupStep) -> Result<()> {
+        match step {
+            CleanupStep::UninstallPackages { patterns } => {
+                for pattern in patterns {
+                    let packages = self.find_packages_matching_pattern(pattern).await?;
+                    for package in packages {
+                        println!("     Uninstalling: {}", package);
+                        self.adb.uninstall_package(&package).await?;
+                    }
+                }
+            }
+            CleanupStep::RemoveDirectories { paths } => {
+                for path in paths {
+                    println!("     Removing directory: {}", path);
+                    self.adb.remove_directory(path).await?;
+                }
+            }
+            CleanupStep::RemoveDirectoriesIfEmpty { paths } => {
+                for path in paths {
+                    if self.is_directory_empty(path).await? {
+                        println!("     Removing empty directory: {}", path);
+                        self.adb.remove_directory(path).await?;
+                    } else {
+                        println!("     Directory not empty, skipping: {}", path);
+                    }
+                }
+            }
+            CleanupStep::RemoveFiles { paths } => {
+                for path in paths {
+                    println!("     Removing file: {}", path);
+                    self.adb.remove_file(path).await?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    async fn execute_install_step(&mut self, step: &InstallStep, repo_name: &str) -> Result<()> {
+        match step {
+            InstallStep::CreateDirectories { paths } => {
+                for path in paths {
+                    println!("     Creating directory: {}", path);
+                    self.adb.create_directory(path).await?;
+                }
+            }
+
+            InstallStep::InstallApks {
+                priority_order,
+                allow_failures,
+                exclude_patterns,
+            } => {
+                let repo_temp_dir = if repo_name == "global" {
+                    self.temp_dir.clone()
+                } else {
+                    self.temp_dir.join(repo_name)
+                };
+
+                let mut apks = self.find_apk_files_in_dir(&repo_temp_dir)?;
+
+                apks.retain(|apk| {
+                    let filename = apk.file_name().unwrap().to_string_lossy();
+                    !exclude_patterns
+                        .iter()
+                        .any(|pattern| self.matches_priority_pattern(&filename, pattern))
+                });
+
+                if apks.is_empty() {
+                    println!("     No APK files found to install");
+                    return Ok(());
+                }
+
+                let sorted_apks = self.sort_apks_by_priority(&apks, priority_order);
+
+                println!("     Installing {} APKs", sorted_apks.len());
+                for apk in sorted_apks {
+                    let apk_name = apk.file_name().unwrap().to_string_lossy();
+                    println!("       Installing: {}", apk_name);
+
+                    match self.adb.install_apk(&apk).await {
+                        Ok(()) => println!("       Installed: {}", apk_name),
+                        Err(e) if *allow_failures => {
+                            println!(
+                                "       Failed to install {} (continuing): {}",
+                                apk_name, e
+                            );
+                        }
+                        Err(e) => return Err(e),
+                    }
+                }
+            }
+
+            InstallStep::PushFiles { files } => {
+                let repo_temp_dir = if repo_name == "global" {
+                    self.temp_dir.clone()
+                } else {
+                    self.temp_dir.join(repo_name)
+                };
+
+                for file_push in files {
+                    self.push_files(&repo_temp_dir, file_push).await?;
+                }
+            }
+
+            InstallStep::GrantPermissions { grants } => {
+                for grant in grants {
+                    println!(
+                        "     Granting permission: {} to {}",
+                        grant.permission, grant.package
+                    );
+                    self.adb
+                        .grant_permission(&grant.package, &grant.permission)
+                        .await?;
+                }
+            }
+
+            InstallStep::SetAppOps { ops } => {
+                for op in ops {
+                    println!(
+                        "     Setting app op: {} {} {}",
+                        op.package, op.operation, op.mode
+                    );
+                    self.adb
+                        .set_app_op(&op.package, &op.operation, &op.mode)
+                        .await?;
+                }
+            }
+
+            InstallStep::RunCommand {
+                command,
+                ignore_failure,
+            } => {
+                println!("     Running command: {}", command);
+                match self.adb.shell(command).await {
+                    Ok(output) => {
+                        if !output.is_empty() {
+                            println!("       Output: {}", output);
+                        }
+                    }
+                    Err(e) if *ignore_failure => {
+                        println!("       Command failed (ignoring): {}", e);
+                    }
+                    Err(e) => return Err(e),
+                }
+            }
+
+            InstallStep::SetLauncher { component } => {
+                println!("     Setting launcher: {}", component);
+                self.adb.set_launcher(component).await?;
+            }
+
+            InstallStep::CreateConfig {
+                path,
+                content,
+                only_if_missing,
+            } => {
+                if *only_if_missing && self.adb.file_exists(path).await? {
+                    println!("     Config already exists: {}", path);
+                    return Ok(());
+                }
+
+                println!("     Creating config: {}", path);
+                self.adb.write_file(path, content).await?;
+            }
+        }
+        Ok(())
+    }
+
+    async fn push_files(&mut self, repo_temp_dir: &Path, file_push: &FilePush) -> Result<()> {
+        let local_pattern = repo_temp_dir.join(&file_push.local);
+        let pattern_str = local_pattern.to_string_lossy();
+
+        for entry in glob(&pattern_str)? {
+            let local_file = entry?;
+
+            let remote_path = if file_push.remote.ends_with('/') {
+                format!(
+                    "{}{}",
+                    file_push.remote,
+                    local_file.file_name().unwrap().to_string_lossy()
+                )
+            } else {
+                file_push.remote.clone()
+            };
+
+            println!(
+                "     Pushing: {} -> {}",
+                local_file.file_name().unwrap().to_string_lossy(),
+                remote_path
+            );
+
+            self.adb.push_file(&local_file, &remote_path).await?;
+
+            if let Some(chmod) = &file_push.chmod {
+                self.adb
+                    .shell(&format!("chmod {} {}", chmod, remote_path))
+                    .await?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn find_apk_files_in_dir(&self, dir: &Path) -> Result<Vec<PathBuf>> {
+        let mut apks = Vec::new();
+        let pattern = dir.join("*.apk");
+
+        for entry in glob(&pattern.to_string_lossy())? {
+            let path = entry?;
+            if path.is_file() {
+                apks.push(path);
+            }
+        }
+
+        Ok(apks)
+    }
+
+    fn sort_apks_by_priority(&self, apks: &[PathBuf], priority_order: &[String]) -> Vec<PathBuf> {
+        let mut sorted_apks = Vec::new();
+        let mut remaining_apks = apks.to_vec();
+
+        for priority_pattern in priority_order {
+            let mut matched_apks = Vec::new();
+
+            remaining_apks.retain(|apk| {
+                let filename = apk.file_name().unwrap().to_string_lossy();
+                let matches = self.matches_priority_pattern(&filename, priority_pattern);
+                if matches {
+                    matched_apks.push(apk.clone());
+                }
+                !matches
+            });
+
+            sorted_apks.extend(matched_apks);
+        }
+
+        sorted_apks.extend(remaining_apks);
+
+        sorted_apks
+    }
+
+    fn matches_priority_pattern(&self, filename: &str, pattern: &str) -> bool {
+        if pattern.starts_with('*') && pattern.ends_with('*') {
+            let inner = &pattern[1..pattern.len() - 1];
+            filename.to_lowercase().contains(&inner.to_lowercase())
+        } else if pattern.starts_with('*') {
+            let suffix = &pattern[1..];
+            filename.to_lowercase().ends_with(&suffix.to_lowercase())
+        } else if pattern.ends_with('*') {
+            let prefix = &pattern[..pattern.len() - 1];
+            filename.to_lowercase().starts_with(&prefix.to_lowercase())
+        } else {
+            filename.eq_ignore_ascii_case(pattern)
+        }
+    }
+
+    async fn find_packages_matching_pattern(&mut self, pattern: &str) -> Result<Vec<String>> {
+        let search_pattern = if pattern.contains('*') {
+            pattern.replace('*', "")
+        } else {
+            pattern.to_string()
+        };
+
+        self.adb.list_packages(&search_pattern).await
+    }
+
+    async fn is_directory_empty(&mut self, path: &str) -> Result<bool> {
+        let output = self.adb.shell(&format!("ls -A {}", path)).await?;
+        Ok(output.trim().is_empty())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_priority_pattern_matching() {
+        let engine = InstallationEngine {
+            config: InstallConfig {
+                name: "test".to_string(),
+                repositories: vec![],
+                global_setup: vec![],
+            },
+            github: GitHubClient::new(),
+            adb: unsafe { std::mem::zeroed() }, // This is just for testing pattern matching
+            temp_dir: PathBuf::new(),
+        };
+
+        assert!(engine.matches_priority_pattern("pinitd-debug.apk", "*pinitd*"));
+        assert!(engine.matches_priority_pattern("SDK-Bridge-release.apk", "*SDK*"));
+        assert!(engine.matches_priority_pattern("MABL-app.apk", "*MABL*"));
+        assert!(!engine.matches_priority_pattern("other-app.apk", "*pinitd*"));
+
+        assert!(engine.matches_priority_pattern("debug.apk", "*debug.apk"));
+        assert!(engine.matches_priority_pattern("app-debug", "app*"));
+    }
+}

@@ -1,0 +1,140 @@
+name: "PenumbraOS"
+
+# Optional: Run once before any repository installation
+global_setup:
+  - type: "RunCommand"
+    command: "settings delete global hidden_api_blacklist_exemptions || true"
+    ignore_failure: true
+
+repositories:
+  # pinitd - Core daemon (can function independently)
+  - name: "pinitd"
+    owner: "PenumbraOS"
+    repo: "pinitd"
+    version: "latest"
+
+    cleanup:
+      - type: "UninstallPackages"
+        patterns: ["com.penumbraos.pinitd"]
+      - type: "RemoveFiles"
+        paths: ["/data/local/tmp/bin/pinitd-cli"]
+      - type: "RemoveDirectoriesIfEmpty"
+        paths: ["/data/local/tmp/bin"]
+
+    releaseAssets: ["*.apk", "pinitd-cli", "pinitd"]
+
+    installation:
+      - type: "CreateDirectories"
+        paths:
+          ["/data/local/tmp/bin", "/sdcard/penumbra/etc/pinitd/system/enabled"]
+
+      - type: "InstallApks"
+        priority_order: ["*pinitd*"]
+
+      - type: "PushFiles"
+        files:
+          - local: "pinitd-cli"
+            remote: "/data/local/tmp/bin/pinitd-cli"
+            chmod: "755"
+
+      - type: "GrantPermissions"
+        grants:
+          - package: "com.penumbraos.pinitd"
+            permission: "android.permission.WRITE_SECURE_SETTINGS"
+          - package: "com.penumbraos.pinitd"
+            permission: "android.permission.READ_LOGS"
+
+      - type: "SetAppOps"
+        ops:
+          - package: "com.penumbraos.pinitd"
+            operation: "MANAGE_EXTERNAL_STORAGE"
+            mode: "allow"
+
+  # SDK - Bridge services (requires pinitd to be useful, but self-contained)
+  - name: "sdk"
+    owner: "PenumbraOS"
+    repo: "sdk"
+    version: "latest"
+
+    cleanup:
+      - type: "UninstallPackages"
+        patterns: ["com.penumbraos.sdk.*", "com.penumbraos.bridge*"]
+
+    releaseAssets: ["*.apk"]
+    repoFiles: ["config/pinitd/*.unit", "config/penumbra"]
+
+    installation:
+      - type: "InstallApks"
+        priority_order: ["*SDK-Bridge*"]
+
+      - type: "PushFiles"
+        files:
+          - local: "penumbra"
+            remote: "/data/local/tmp/bin/penumbra"
+            chmod: "755"
+          - local: "*.unit"
+            remote: "/sdcard/penumbra/etc/pinitd/system/"
+
+      # Enable the units by touching enabled/ files
+      - type: "RunCommand"
+        command: "touch /sdcard/penumbra/etc/pinitd/system/enabled/bridge_service.unit"
+      - type: "RunCommand"
+        command: "touch /sdcard/penumbra/etc/pinitd/system/enabled/bridge_settings.unit"
+      - type: "RunCommand"
+        command: "touch /sdcard/penumbra/etc/pinitd/system/enabled/bridge_shell_service.unit"
+      - type: "RunCommand"
+        command: "touch /sdcard/penumbra/etc/pinitd/system/enabled/bridge_system_service.unit"
+
+  # MABL - AI assistant framework (can work with just pinitd)
+  - name: "mabl"
+    owner: "PenumbraOS"
+    repo: "mabl"
+    version: "latest"
+
+    cleanup:
+      - type: "UninstallPackages"
+        patterns: ["com.penumbraos.mabl.*", "com.penumbraos.plugins.*"]
+
+    releaseAssets: ["*.apk"]
+
+    installation:
+      - type: "CreateDirectories"
+        paths: ["/sdcard/penumbra/etc/mabl"]
+
+      - type: "InstallApks"
+        priority_order: ["*MABL*", "*Plugin*"]
+        exclude_patterns: ["*Simulator*", "*Android*"]
+
+      - type: "SetAppOps"
+        ops:
+          - package: "com.penumbraos.mabl.pin"
+            operation: "MANAGE_EXTERNAL_STORAGE"
+            mode: "allow"
+
+      - type: "SetAppOps"
+        ops:
+          - package: "com.penumbraos.plugins.openai"
+            operation: "MANAGE_EXTERNAL_STORAGE"
+            mode: "allow"
+
+      - type: "CreateConfig"
+        path: "/sdcard/penumbra/etc/mabl/llm_configs.json"
+        only_if_missing: true
+        content: |
+          {
+            "configs": [
+              {
+                "name": "Gemini 2.5 Flash",
+                "apiKey": "api-key-here",
+                "model": "gemini-2.5-flash",
+                "baseUrl": "https://generativelanguage.googleapis.com/v1beta/openai/"
+              }
+            ]
+          }
+
+      - type: "RunCommand"
+        command: "pm disable-user --user 0 humane.experience.systemnavigation"
+        ignore_failure: true
+
+      - type: "SetLauncher"
+        component: "com.penumbraos.mabl.pin/.MainActivity"
