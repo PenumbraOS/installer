@@ -50,6 +50,10 @@ repositories:
             operation: "MANAGE_EXTERNAL_STORAGE"
             mode: "allow"
 
+      # Force start pinitd so it is ready to receive BOOT_COMPLETED on reboot
+      - type: "RunCommand"
+        command: "am start -n com.penumbraos.pinitd/.ManualLaunchActivity"
+
   # SDK - Bridge services (requires pinitd to be useful, but self-contained)
   - name: "sdk"
     owner: "PenumbraOS"
