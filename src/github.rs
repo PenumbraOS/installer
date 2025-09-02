@@ -76,6 +76,15 @@ impl GitHubClient {
                 .ok_or_else(|| InstallerError::GitHub("Asset has no name".to_string()))?;
                 
             if self.matches_pattern(name, pattern) {
+                let should_exclude = exclude_patterns.iter().any(|exclude_pattern| {
+                    self.matches_pattern(name, exclude_pattern)
+                });
+                
+                if should_exclude {
+                    println!("  Skipping excluded asset: {}", name);
+                    continue;
+                }
+                
                 let download_url = asset["browser_download_url"].as_str()
                     .ok_or_else(|| InstallerError::GitHub("Asset has no download URL".to_string()))?;
                     

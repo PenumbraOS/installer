@@ -84,14 +84,11 @@ impl InstallationEngine {
         for pattern in &repo.release_assets {
             let downloaded = self
                 .github
-                .download_asset(&repo.owner, &repo.repo, &version, pattern, &repo_temp_dir)
+                .download_asset(&repo.owner, &repo.repo, &version, pattern, &repo_temp_dir, &exclude_patterns)
                 .await?;
 
-            self.filter_downloaded_assets(&downloaded, &exclude_patterns).await?;
-
-            let remaining_count = self.count_remaining_assets(&downloaded, &exclude_patterns)?;
-            if remaining_count == 0 {
-                println!("   No release assets will be installed for pattern: {}", pattern);
+            if downloaded.is_empty() {
+                println!("   No release assets found for pattern: {}", pattern);
             }
         }
 
@@ -393,6 +390,15 @@ impl InstallationEngine {
     async fn is_directory_empty(&mut self, path: &str) -> Result<bool> {
         let output = self.adb.shell(&format!("ls -A {}", path)).await?;
         Ok(output.trim().is_empty())
+    }
+
+    fn get_exclusion_patterns(&self, repo: &Repository) -> Vec<String> {
+        for step in &repo.installation {
+            if let InstallStep::InstallApks { exclude_patterns, .. } = step {
+                return exclude_patterns.clone();
+            }
+        }
+        Vec::new()
     }
 }
 
