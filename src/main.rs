@@ -24,6 +24,10 @@ enum Commands {
         repos: Option<Vec<String>>,
         #[arg(long)]
         cache_dir: Option<PathBuf>,
+        #[arg(long)]
+        config: Option<PathBuf>,
+        #[arg(long)]
+        config_url: Option<String>,
     },
     Uninstall {
         #[arg(long, value_delimiter = ',')]
@@ -34,20 +38,6 @@ enum Commands {
         repos: Option<Vec<String>>,
         #[arg(long)]
         cache_dir: PathBuf,
-    },
-    Custom {
-        config: PathBuf,
-        #[arg(long, value_delimiter = ',')]
-        repos: Option<Vec<String>>,
-        #[arg(long)]
-        cache_dir: Option<PathBuf>,
-    },
-    Url {
-        url: String,
-        #[arg(long, value_delimiter = ',')]
-        repos: Option<Vec<String>>,
-        #[arg(long)]
-        cache_dir: Option<PathBuf>,
     },
     List {
         config: Option<PathBuf>,
@@ -66,37 +56,45 @@ async fn main() -> Result<()> {
     }
 
     match cli.command {
-        Commands::Install { repos, cache_dir } => {
-            let config = ConfigLoader::load_builtin("penumbra")?;
-            run_installation(config, repos.as_deref(), cache_dir).await?;
+        Commands::Install {
+            repos,
+            cache_dir,
+            config,
+            config_url,
+        } => {
+            let config = match (config, config_url) {
+                (None, None) => ConfigLoader::load_builtin("penumbra"),
+                (None, Some(config_url)) => ConfigLoader::load_from_url(&config_url).await,
+                (Some(config_path), None) => ConfigLoader::load_from_file(&config_path).await,
+                (Some(_), Some(_)) => {
+                    return Err(InstallerError::CLI(
+                        "`config` and `config_url` options are mutually exclusive".into(),
+                    ));
+                }
+            }?;
+            let mut engine = if let Some(ref cache_path) = cache_dir {
+                InstallationEngine::new_with_cache(config, cache_path.clone()).await?
+            } else {
+                InstallationEngine::new(config).await?
+            };
+
+            if cache_dir.is_some() {
+                engine.install_cached(repos).await?;
+            } else {
+                engine.install(repos).await?;
+            }
         }
 
         Commands::Uninstall { repos } => {
             let config = ConfigLoader::load_builtin("penumbra")?;
-            run_uninstall(config, repos.as_deref()).await?;
+            let mut engine = InstallationEngine::new(config).await?;
+            engine.uninstall(repos).await?;
         }
 
         Commands::Download { repos, cache_dir } => {
             let config = ConfigLoader::load_builtin("penumbra")?;
-            run_download(config, repos.as_deref(), cache_dir).await?;
-        }
-
-        Commands::Custom {
-            config,
-            repos,
-            cache_dir,
-        } => {
-            let config = ConfigLoader::load_from_file(&config).await?;
-            run_installation(config, repos.as_deref(), cache_dir).await?;
-        }
-
-        Commands::Url {
-            url,
-            repos,
-            cache_dir,
-        } => {
-            let config = ConfigLoader::load_from_url(&url).await?;
-            run_installation(config, repos.as_deref(), cache_dir).await?;
+            let mut engine = InstallationEngine::new_with_cache(config, cache_dir).await?;
+            engine.download(repos).await?;
         }
 
         Commands::List { config } => {
@@ -147,86 +145,6 @@ async fn main() -> Result<()> {
             }
         }
     }
-
-    Ok(())
-}
-
-async fn run_installation(
-    config: penumbra_installer::InstallConfig,
-    repos: Option<&[String]>,
-    cache_dir: Option<PathBuf>,
-) -> Result<()> {
-    if let Some(repo_names) = repos {
-        let filtered = config.filter_repositories(repo_names)?;
-        println!(
-            "Installing {} of {} repositories:",
-            filtered.len(),
-            config.repositories.len()
-        );
-        for repo in &filtered {
-            println!("  - {}", repo.name);
-        }
-        println!();
-    }
-
-    let mut engine = if let Some(ref cache_path) = cache_dir {
-        InstallationEngine::new_with_cache(config, cache_path.clone()).await?
-    } else {
-        InstallationEngine::new(config).await?
-    };
-
-    if cache_dir.is_some() {
-        engine.install_cached(repos).await?;
-    } else {
-        engine.install(repos).await?;
-    }
-
-    Ok(())
-}
-
-async fn run_uninstall(
-    config: penumbra_installer::InstallConfig,
-    repos: Option<&[String]>,
-) -> Result<()> {
-    if let Some(repo_names) = repos {
-        let filtered = config.filter_repositories(repo_names)?;
-        println!(
-            "Uninstalling {} of {} repositories:",
-            filtered.len(),
-            config.repositories.len()
-        );
-        for repo in &filtered {
-            println!("  - {}", repo.name);
-        }
-        println!();
-    }
-
-    let mut engine = InstallationEngine::new(config).await?;
-    engine.uninstall(repos).await?;
-
-    Ok(())
-}
-
-async fn run_download(
-    config: penumbra_installer::InstallConfig,
-    repos: Option<&[String]>,
-    cache_dir: PathBuf,
-) -> Result<()> {
-    if let Some(repo_names) = repos {
-        let filtered = config.filter_repositories(repo_names)?;
-        println!(
-            "Downloading {} of {} repositories:",
-            filtered.len(),
-            config.repositories.len()
-        );
-        for repo in &filtered {
-            println!("  - {}", repo.name);
-        }
-        println!();
-    }
-
-    let mut engine = InstallationEngine::new_with_cache(config, cache_dir).await?;
-    engine.download(repos).await?;
 
     Ok(())
 }

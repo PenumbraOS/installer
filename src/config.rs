@@ -50,7 +50,9 @@ pub enum CleanupStep {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(tag = "type")]
 pub enum InstallStep {
-    CreateDirectories { paths: Vec<String> },
+    CreateDirectories {
+        paths: Vec<String>,
+    },
     InstallApks {
         priority_order: Vec<String>,
         #[serde(default)]
@@ -58,15 +60,23 @@ pub enum InstallStep {
         #[serde(default)]
         exclude_patterns: Vec<String>,
     },
-    PushFiles { files: Vec<FilePush> },
-    GrantPermissions { grants: Vec<PermissionGrant> },
-    SetAppOps { ops: Vec<AppOpGrant> },
+    PushFiles {
+        files: Vec<FilePush>,
+    },
+    GrantPermissions {
+        grants: Vec<PermissionGrant>,
+    },
+    SetAppOps {
+        ops: Vec<AppOpGrant>,
+    },
     RunCommand {
         command: String,
         #[serde(default)]
         ignore_failure: bool,
     },
-    SetLauncher { component: String },
+    SetLauncher {
+        component: String,
+    },
     CreateConfig {
         path: String,
         content: String,
@@ -173,7 +183,7 @@ impl InstallConfig {
         let mut filtered = Vec::new();
 
         for name in names {
-            if let Some(repo) = self.get_repository(name) {
+            if let Some(repo) = self.get_repository(&name) {
                 filtered.push(repo);
             } else {
                 return Err(InstallerError::RepositoryNotFound { repo: name.clone() });

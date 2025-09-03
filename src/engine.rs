@@ -35,7 +35,7 @@ impl InstallationEngine {
         })
     }
 
-    pub async fn install(&mut self, repo_filter: Option<&[String]>) -> Result<()> {
+    pub async fn install(&mut self, repo_filter: Option<Vec<String>>) -> Result<()> {
         println!("Starting {} installation", self.config.name);
 
         if !self.config.global_setup.is_empty() {
@@ -48,7 +48,7 @@ impl InstallationEngine {
 
         let repos_to_install: Vec<_> = if let Some(filter) = repo_filter {
             self.config
-                .filter_repositories(filter)?
+                .filter_repositories(&filter)?
                 .into_iter()
                 .cloned()
                 .collect()
@@ -74,12 +74,12 @@ impl InstallationEngine {
         Ok(())
     }
 
-    pub async fn uninstall(&mut self, repo_filter: Option<&[String]>) -> Result<()> {
+    pub async fn uninstall(&mut self, repo_filter: Option<Vec<String>>) -> Result<()> {
         println!("Starting {} uninstall", self.config.name);
 
         let repos_to_uninstall: Vec<_> = if let Some(filter) = repo_filter {
             self.config
-                .filter_repositories(filter)?
+                .filter_repositories(&filter)?
                 .into_iter()
                 .cloned()
                 .collect()
@@ -102,20 +102,12 @@ impl InstallationEngine {
         Ok(())
     }
 
-    pub async fn download(&mut self, repo_filter: Option<&[String]>) -> Result<()> {
+    pub async fn download(&mut self, repo_filter: Option<Vec<String>>) -> Result<()> {
         println!("Starting {} asset download", self.config.name);
-
-        if !self.config.global_setup.is_empty() {
-            println!("Running global setup");
-            let global_setup = self.config.global_setup.clone();
-            for step in &global_setup {
-                self.execute_install_step(step, "global").await?;
-            }
-        }
 
         let repos_to_download: Vec<_> = if let Some(filter) = repo_filter {
             self.config
-                .filter_repositories(filter)?
+                .filter_repositories(&filter)?
                 .into_iter()
                 .cloned()
                 .collect()
@@ -138,7 +130,7 @@ impl InstallationEngine {
         Ok(())
     }
 
-    pub async fn install_cached(&mut self, repo_filter: Option<&[String]>) -> Result<()> {
+    pub async fn install_cached(&mut self, repo_filter: Option<Vec<String>>) -> Result<()> {
         println!("Starting {} installation from cache", self.config.name);
 
         if !self.config.global_setup.is_empty() {
@@ -151,7 +143,7 @@ impl InstallationEngine {
 
         let repos_to_install: Vec<_> = if let Some(filter) = repo_filter {
             self.config
-                .filter_repositories(filter)?
+                .filter_repositories(&filter)?
                 .into_iter()
                 .cloned()
                 .collect()

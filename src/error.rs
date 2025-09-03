@@ -52,6 +52,9 @@ pub enum InstallerError {
 
     #[error("Invalid version format: {version}")]
     InvalidVersion { version: String },
+
+    #[error("CLI error: {0}")]
+    CLI(String),
 }
 
 pub type Result<T> = std::result::Result<T, InstallerError>;
