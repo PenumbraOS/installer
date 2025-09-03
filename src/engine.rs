@@ -18,8 +18,11 @@ pub struct InstallationEngine {
 
 impl InstallationEngine {
     pub async fn new(config: InstallConfig) -> Result<Self> {
-        let temp_dir = Platform::temp_dir();
-        fs::create_dir_all(&temp_dir).await?;
+        InstallationEngine::new_with_cache(config, Platform::temp_dir()).await
+    }
+
+    pub async fn new_with_cache(config: InstallConfig, cache_dir: PathBuf) -> Result<Self> {
+        fs::create_dir_all(&cache_dir).await?;
 
         let github = GitHubClient::new();
         let adb = AdbManager::connect().await?;
@@ -28,7 +31,7 @@ impl InstallationEngine {
             config,
             github,
             adb,
-            temp_dir,
+            temp_dir: cache_dir,
         })
     }
 
@@ -99,47 +102,83 @@ impl InstallationEngine {
         Ok(())
     }
 
+    pub async fn download(&mut self, repo_filter: Option<&[String]>) -> Result<()> {
+        println!("Starting {} asset download", self.config.name);
+
+        if !self.config.global_setup.is_empty() {
+            println!("Running global setup");
+            let global_setup = self.config.global_setup.clone();
+            for step in &global_setup {
+                self.execute_install_step(step, "global").await?;
+            }
+        }
+
+        let repos_to_download: Vec<_> = if let Some(filter) = repo_filter {
+            self.config
+                .filter_repositories(filter)?
+                .into_iter()
+                .cloned()
+                .collect()
+        } else {
+            self.config.repositories.clone()
+        };
+
+        if repos_to_download.is_empty() {
+            return Err(InstallerError::NoRepositoriesFound);
+        }
+
+        println!("Downloading {} repositories", repos_to_download.len());
+
+        for repo in &repos_to_download {
+            println!("\n--- Downloading repository: {} ---", repo.name);
+            self.download_repository(repo).await?;
+        }
+
+        println!("Download complete - assets cached for installation");
+        Ok(())
+    }
+
+    pub async fn install_cached(&mut self, repo_filter: Option<&[String]>) -> Result<()> {
+        println!("Starting {} installation from cache", self.config.name);
+
+        if !self.config.global_setup.is_empty() {
+            println!("Running global setup");
+            let global_setup = self.config.global_setup.clone();
+            for step in &global_setup {
+                self.execute_install_step(step, "global").await?;
+            }
+        }
+
+        let repos_to_install: Vec<_> = if let Some(filter) = repo_filter {
+            self.config
+                .filter_repositories(filter)?
+                .into_iter()
+                .cloned()
+                .collect()
+        } else {
+            self.config.repositories.clone()
+        };
+
+        if repos_to_install.is_empty() {
+            return Err(InstallerError::NoRepositoriesFound);
+        }
+
+        println!(
+            "Installing {} repositories from cache",
+            repos_to_install.len()
+        );
+
+        for repo in &repos_to_install {
+            println!("\n--- Installing repository from cache: {} ---", repo.name);
+            self.install_cached_repository(repo).await?;
+        }
+
+        println!("Installation complete");
+        Ok(())
+    }
+
     async fn install_repository(&mut self, repo: &Repository) -> Result<()> {
-        let version = self.github.get_version(repo).await?;
-        println!("   Version: {}", version);
-
-        let repo_temp_dir = self.temp_dir.join(&repo.name);
-        fs::create_dir_all(&repo_temp_dir).await?;
-
-        let exclude_patterns = self.get_exclusion_patterns(repo);
-
-        println!("   Downloading release assets");
-        for pattern in &repo.release_assets {
-            let downloaded = self
-                .github
-                .download_asset(
-                    &repo.owner,
-                    &repo.repo,
-                    &version,
-                    pattern,
-                    &repo_temp_dir,
-                    &exclude_patterns,
-                )
-                .await?;
-
-            if downloaded.is_empty() {
-                println!("   No release assets found for pattern: {}", pattern);
-            }
-        }
-
-        for filepath in &repo.repo_files {
-            println!("   Downloading repository file: {}", filepath);
-            if filepath.contains('*') {
-                self.github
-                    .download_file(&repo.owner, &repo.repo, &version, filepath, &repo_temp_dir)
-                    .await?;
-            } else {
-                let dest = repo_temp_dir.join(Path::new(filepath).file_name().unwrap());
-                self.github
-                    .download_file(&repo.owner, &repo.repo, &version, filepath, &dest)
-                    .await?;
-            }
-        }
+        self.download_repository_assets(repo).await?;
 
         if !repo.cleanup.is_empty() {
             println!("   Running cleanup");
@@ -169,6 +208,38 @@ impl InstallationEngine {
         }
 
         println!("   {} uninstallation complete", repo.name);
+        Ok(())
+    }
+
+    async fn download_repository(&mut self, repo: &Repository) -> Result<()> {
+        self.download_repository_assets(repo).await?;
+        println!("   {} download complete", repo.name);
+        Ok(())
+    }
+
+    async fn install_cached_repository(&mut self, repo: &Repository) -> Result<()> {
+        let repo_temp_dir = self.temp_dir.join(&repo.name);
+
+        if !repo_temp_dir.exists() {
+            return Err(InstallerError::Config(format!(
+                "No cached assets found for repository '{}'. Run 'penumbra download' first.",
+                repo.name
+            )));
+        }
+
+        if !repo.cleanup.is_empty() {
+            println!("   Running cleanup");
+            for cleanup in &repo.cleanup {
+                self.execute_cleanup_step(cleanup).await?;
+            }
+        }
+
+        println!("   Running installation steps");
+        for step in &repo.installation {
+            self.execute_install_step(step, &repo.name).await?;
+        }
+
+        println!("   {} installation complete", repo.name);
         Ok(())
     }
 
@@ -449,6 +520,51 @@ impl InstallationEngine {
             }
         }
         Vec::new()
+    }
+
+    async fn download_repository_assets(&mut self, repo: &Repository) -> Result<()> {
+        let version = self.github.get_version(repo).await?;
+        println!("   Version: {}", version);
+
+        let repo_temp_dir = self.temp_dir.join(&repo.name);
+        fs::create_dir_all(&repo_temp_dir).await?;
+
+        let exclude_patterns = self.get_exclusion_patterns(repo);
+
+        println!("   Downloading release assets");
+        for pattern in &repo.release_assets {
+            let downloaded = self
+                .github
+                .download_asset(
+                    &repo.owner,
+                    &repo.repo,
+                    &version,
+                    pattern,
+                    &repo_temp_dir,
+                    &exclude_patterns,
+                )
+                .await?;
+
+            if downloaded.is_empty() {
+                println!("   No release assets found for pattern: {}", pattern);
+            }
+        }
+
+        for filepath in &repo.repo_files {
+            println!("   Downloading repository file: {}", filepath);
+            if filepath.contains('*') {
+                self.github
+                    .download_file(&repo.owner, &repo.repo, &version, filepath, &repo_temp_dir)
+                    .await?;
+            } else {
+                let dest = repo_temp_dir.join(Path::new(filepath).file_name().unwrap());
+                self.github
+                    .download_file(&repo.owner, &repo.repo, &version, filepath, &dest)
+                    .await?;
+            }
+        }
+
+        Ok(())
     }
 }
 
