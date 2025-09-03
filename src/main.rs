@@ -23,6 +23,10 @@ enum Commands {
         #[arg(long, value_delimiter = ',')]
         repos: Option<Vec<String>>,
     },
+    Uninstall {
+        #[arg(long, value_delimiter = ',')]
+        repos: Option<Vec<String>>,
+    },
     Custom {
         config: PathBuf,
         #[arg(long, value_delimiter = ',')]
@@ -53,6 +57,11 @@ async fn main() -> Result<()> {
         Commands::Install { repos } => {
             let config = ConfigLoader::load_builtin("penumbra")?;
             run_installation(config, repos.as_deref()).await?;
+        }
+
+        Commands::Uninstall { repos } => {
+            let config = ConfigLoader::load_builtin("penumbra")?;
+            run_uninstall(config, repos.as_deref()).await?;
         }
 
         Commands::Custom { config, repos } => {
@@ -136,6 +145,29 @@ async fn run_installation(
 
     let mut engine = InstallationEngine::new(config).await?;
     engine.install(repos).await?;
+
+    Ok(())
+}
+
+async fn run_uninstall(
+    config: penumbra_installer::InstallConfig,
+    repos: Option<&[String]>,
+) -> Result<()> {
+    if let Some(repo_names) = repos {
+        let filtered = config.filter_repositories(repo_names)?;
+        println!(
+            "Uninstalling {} of {} repositories:",
+            filtered.len(),
+            config.repositories.len()
+        );
+        for repo in &filtered {
+            println!("  - {}", repo.name);
+        }
+        println!();
+    }
+
+    let mut engine = InstallationEngine::new(config).await?;
+    engine.uninstall(repos).await?;
 
     Ok(())
 }

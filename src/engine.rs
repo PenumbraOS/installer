@@ -71,6 +71,34 @@ impl InstallationEngine {
         Ok(())
     }
 
+    pub async fn uninstall(&mut self, repo_filter: Option<&[String]>) -> Result<()> {
+        println!("Starting {} uninstall", self.config.name);
+
+        let repos_to_uninstall: Vec<_> = if let Some(filter) = repo_filter {
+            self.config
+                .filter_repositories(filter)?
+                .into_iter()
+                .cloned()
+                .collect()
+        } else {
+            self.config.repositories.clone()
+        };
+
+        if repos_to_uninstall.is_empty() {
+            return Err(InstallerError::NoRepositoriesFound);
+        }
+
+        println!("Uninstalling {} repositories", repos_to_uninstall.len());
+
+        for repo in repos_to_uninstall.iter().rev() {
+            println!("\n--- Uninstalling repository: {} ---", repo.name);
+            self.uninstall_repository(repo).await?;
+        }
+
+        println!("Uninstallation complete");
+        Ok(())
+    }
+
     async fn install_repository(&mut self, repo: &Repository) -> Result<()> {
         let version = self.github.get_version(repo).await?;
         println!("   Version: {}", version);
@@ -84,7 +112,14 @@ impl InstallationEngine {
         for pattern in &repo.release_assets {
             let downloaded = self
                 .github
-                .download_asset(&repo.owner, &repo.repo, &version, pattern, &repo_temp_dir, &exclude_patterns)
+                .download_asset(
+                    &repo.owner,
+                    &repo.repo,
+                    &version,
+                    pattern,
+                    &repo_temp_dir,
+                    &exclude_patterns,
+                )
                 .await?;
 
             if downloaded.is_empty() {
@@ -119,6 +154,21 @@ impl InstallationEngine {
         }
 
         println!("   {} installation complete", repo.name);
+        Ok(())
+    }
+
+    async fn uninstall_repository(&mut self, repo: &Repository) -> Result<()> {
+        if repo.cleanup.is_empty() {
+            println!("   No cleanup steps defined for {}", repo.name);
+            return Ok(());
+        }
+
+        println!("   Running cleanup steps");
+        for cleanup in &repo.cleanup {
+            self.execute_cleanup_step(cleanup).await?;
+        }
+
+        println!("   {} uninstallation complete", repo.name);
         Ok(())
     }
 
@@ -203,10 +253,7 @@ impl InstallationEngine {
                     match self.adb.install_apk(&apk).await {
                         Ok(()) => println!("       Installed: {}", apk_name),
                         Err(e) if *allow_failures => {
-                            println!(
-                                "       Failed to install {} (continuing): {}",
-                                apk_name, e
-                            );
+                            println!("       Failed to install {} (continuing): {}", apk_name, e);
                         }
                         Err(e) => return Err(e),
                     }
@@ -394,7 +441,10 @@ impl InstallationEngine {
 
     fn get_exclusion_patterns(&self, repo: &Repository) -> Vec<String> {
         for step in &repo.installation {
-            if let InstallStep::InstallApks { exclude_patterns, .. } = step {
+            if let InstallStep::InstallApks {
+                exclude_patterns, ..
+            } = step
+            {
                 return exclude_patterns.clone();
             }
         }
