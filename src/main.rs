@@ -15,6 +15,9 @@ struct Cli {
 
     #[arg(short, long, global = true)]
     verbose: bool,
+
+    #[arg(long, global = true, env)]
+    github_token: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -73,9 +76,9 @@ async fn main() -> Result<()> {
                 }
             }?;
             let mut engine = if let Some(ref cache_path) = cache_dir {
-                InstallationEngine::new_with_cache(config, cache_path.clone()).await?
+                InstallationEngine::new_with_cache(config, cache_path.clone(), cli.github_token.clone()).await?
             } else {
-                InstallationEngine::new(config).await?
+                InstallationEngine::new_with_token(config, cli.github_token.clone()).await?
             };
 
             if cache_dir.is_some() {
@@ -87,13 +90,13 @@ async fn main() -> Result<()> {
 
         Commands::Uninstall { repos } => {
             let config = ConfigLoader::load_builtin("penumbra")?;
-            let mut engine = InstallationEngine::new(config).await?;
+            let mut engine = InstallationEngine::new_with_token(config, cli.github_token.clone()).await?;
             engine.uninstall(repos).await?;
         }
 
         Commands::Download { repos, cache_dir } => {
             let config = ConfigLoader::load_builtin("penumbra")?;
-            let mut engine = InstallationEngine::new_with_cache(config, cache_dir).await?;
+            let mut engine = InstallationEngine::new_with_cache(config, cache_dir, cli.github_token.clone()).await?;
             engine.download(repos).await?;
         }
 

@@ -8,16 +8,23 @@ use crate::platform::Platform;
 
 pub struct GitHubClient {
     client: Client,
+    auth_header: Option<String>,
 }
 
 impl GitHubClient {
     pub fn new() -> Self {
+        Self::new_with_token(None)
+    }
+
+    pub fn new_with_token(token: Option<String>) -> Self {
         let client = Client::builder()
             .user_agent(Platform::user_agent())
             .build()
             .unwrap();
+        
+        let auth_header = token.map(|t| format!("Bearer {}", t));
             
-        Self { client }
+        Self { client, auth_header }
     }
     
     pub async fn get_version(&self, repo: &Repository) -> Result<String> {
@@ -31,7 +38,13 @@ impl GitHubClient {
     
     async fn get_latest_version(&self, owner: &str, repo: &str) -> Result<String> {
         let url = format!("https://api.github.com/repos/{}/{}/releases/latest", owner, repo);
-        let response = self.client.get(&url).send().await?;
+        let mut request = self.client.get(&url);
+        
+        if let Some(ref auth) = self.auth_header {
+            request = request.header("Authorization", auth);
+        }
+        
+        let response = request.send().await?;
         
         if response.status().is_success() {
             let json: Value = response.json().await?;
@@ -41,7 +54,13 @@ impl GitHubClient {
         }
         
         let url = format!("https://api.github.com/repos/{}/{}/releases", owner, repo);
-        let response = self.client.get(&url).send().await?;
+        let mut request = self.client.get(&url);
+        
+        if let Some(ref auth) = self.auth_header {
+            request = request.header("Authorization", auth);
+        }
+        
+        let response = request.send().await?;
         
         if !response.status().is_success() {
             return Err(InstallerError::GitHub(format!(
@@ -122,8 +141,14 @@ impl GitHubClient {
         
         let url = format!("https://api.github.com/repos/{}/{}/contents/{}", 
                          owner, repo, base_path.trim_end_matches('/'));
+        
+        let mut request = self.client.get(&url);
+        
+        if let Some(ref auth) = self.auth_header {
+            request = request.header("Authorization", auth);
+        }
                          
-        let response = self.client.get(&url).send().await?;
+        let response = request.send().await?;
         if !response.status().is_success() {
             return Err(InstallerError::GitHub(format!(
                 "Failed to list directory contents: HTTP {}", response.status()
@@ -157,7 +182,13 @@ impl GitHubClient {
             format!("https://api.github.com/repos/{}/{}/releases/tags/{}", owner, repo, version)
         };
         
-        let response = self.client.get(&url).send().await?;
+        let mut request = self.client.get(&url);
+        
+        if let Some(ref auth) = self.auth_header {
+            request = request.header("Authorization", auth);
+        }
+        
+        let response = request.send().await?;
         
         if !response.status().is_success() {
             return Err(InstallerError::GitHub(format!(

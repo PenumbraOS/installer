@@ -18,13 +18,17 @@ pub struct InstallationEngine {
 
 impl InstallationEngine {
     pub async fn new(config: InstallConfig) -> Result<Self> {
-        InstallationEngine::new_with_cache(config, Platform::temp_dir()).await
+        InstallationEngine::new_with_cache(config, Platform::temp_dir(), None).await
     }
 
-    pub async fn new_with_cache(config: InstallConfig, cache_dir: PathBuf) -> Result<Self> {
+    pub async fn new_with_token(config: InstallConfig, github_token: Option<String>) -> Result<Self> {
+        InstallationEngine::new_with_cache(config, Platform::temp_dir(), github_token).await
+    }
+
+    pub async fn new_with_cache(config: InstallConfig, cache_dir: PathBuf, github_token: Option<String>) -> Result<Self> {
         fs::create_dir_all(&cache_dir).await?;
 
-        let github = GitHubClient::new();
+        let github = GitHubClient::new_with_token(github_token);
         let adb = AdbManager::connect().await?;
 
         Ok(Self {
