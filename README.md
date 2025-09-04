@@ -22,6 +22,9 @@ installer install --repos pinitd,mabl
 # Install from local download cache
 installer install --cache_dir cache
 
+# Install using a GitHub PAT for downloads
+installer install --github-token [SOME_PAT]
+
 # Download to local cache
 installer download --cache_dir cache
 ```
