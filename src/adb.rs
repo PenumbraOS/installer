@@ -9,6 +9,19 @@ pub struct AdbManager {
 
 impl AdbManager {
     pub async fn connect() -> Result<Self> {
+        // TODO: Integrate USB when https://github.com/cocool97/adb_client/issues/108 is fixed
+        // // Use autodetect to find and connect to USB device
+        // let device = ADBUSBDevice::autodetect().map_err(|e| match e {
+        //     adb_client::RustADBError::DeviceNotFound(msg) => {
+        //         if msg.contains("two Android devices") {
+        //             InstallerError::MultipleDevices
+        //         } else {
+        //             InstallerError::NoDevice
+        //         }
+        //     }
+        //     _ => InstallerError::Adb(format!("Failed to connect to USB device: {}", e)),
+        // })?;
+
         let addr = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 5037);
         let mut server = ADBServer::new(addr);
 
