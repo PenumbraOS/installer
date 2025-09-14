@@ -82,8 +82,10 @@ impl InstallationEngine {
             self.install_repository(repo, with_cache).await?;
         }
 
-        println!("Cleaning up temporary files");
-        fs::remove_dir_all(&self.temp_dir).await?;
+        if !with_cache {
+            println!("Cleaning up temporary files");
+            fs::remove_dir_all(&self.temp_dir).await?;
+        }
 
         println!("Installation complete");
 
