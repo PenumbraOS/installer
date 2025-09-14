@@ -18,6 +18,9 @@ pub struct Repository {
     pub version: VersionSpec,
 
     #[serde(default)]
+    pub reboot_after_completion: bool,
+
+    #[serde(default)]
     pub cleanup: Vec<CleanupStep>,
     #[serde(rename = "releaseAssets")]
     pub release_assets: Vec<String>,

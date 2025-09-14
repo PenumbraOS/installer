@@ -86,6 +86,17 @@ impl InstallationEngine {
         fs::remove_dir_all(&self.temp_dir).await?;
 
         println!("Installation complete");
+
+        if self
+            .config
+            .repositories
+            .iter()
+            .any(|r| r.reboot_after_completion)
+        {
+            println!("Rebooting device");
+            self.adb.reboot()?;
+        }
+
         Ok(())
     }
 

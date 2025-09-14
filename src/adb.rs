@@ -171,4 +171,11 @@ impl AdbManager {
 
         Ok(packages)
     }
+
+    pub fn reboot(&mut self) -> Result<()> {
+        self.device
+            .reboot(adb_client::RebootType::System)
+            .map_err(|e| InstallerError::Adb(e.to_string()))?;
+        Ok(())
+    }
 }
