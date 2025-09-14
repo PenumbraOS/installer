@@ -21,11 +21,18 @@ impl InstallationEngine {
         InstallationEngine::new_with_cache(config, Platform::temp_dir(), None).await
     }
 
-    pub async fn new_with_token(config: InstallConfig, github_token: Option<String>) -> Result<Self> {
+    pub async fn new_with_token(
+        config: InstallConfig,
+        github_token: Option<String>,
+    ) -> Result<Self> {
         InstallationEngine::new_with_cache(config, Platform::temp_dir(), github_token).await
     }
 
-    pub async fn new_with_cache(config: InstallConfig, cache_dir: PathBuf, github_token: Option<String>) -> Result<Self> {
+    pub async fn new_with_cache(
+        config: InstallConfig,
+        cache_dir: PathBuf,
+        github_token: Option<String>,
+    ) -> Result<Self> {
         fs::create_dir_all(&cache_dir).await?;
 
         let github = GitHubClient::new_with_token(github_token);
@@ -39,7 +46,11 @@ impl InstallationEngine {
         })
     }
 
-    pub async fn install(&mut self, repo_filter: Option<Vec<String>>) -> Result<()> {
+    pub async fn install(
+        &mut self,
+        repo_filter: Option<Vec<String>>,
+        with_cache: bool,
+    ) -> Result<()> {
         println!("Starting {} installation", self.config.name);
 
         if !self.config.global_setup.is_empty() {
@@ -68,7 +79,7 @@ impl InstallationEngine {
 
         for repo in &repos_to_install {
             println!("\n--- Installing repository: {} ---", repo.name);
-            self.install_repository(repo).await?;
+            self.install_repository(repo, with_cache).await?;
         }
 
         println!("Cleaning up temporary files");
@@ -134,47 +145,19 @@ impl InstallationEngine {
         Ok(())
     }
 
-    pub async fn install_cached(&mut self, repo_filter: Option<Vec<String>>) -> Result<()> {
-        println!("Starting {} installation from cache", self.config.name);
+    async fn install_repository(&mut self, repo: &Repository, with_cache: bool) -> Result<()> {
+        if with_cache {
+            let repo_temp_dir = self.temp_dir.join(&repo.name);
 
-        if !self.config.global_setup.is_empty() {
-            println!("Running global setup");
-            let global_setup = self.config.global_setup.clone();
-            for step in &global_setup {
-                self.execute_install_step(step, "global").await?;
+            if !repo_temp_dir.exists() {
+                return Err(InstallerError::Config(format!(
+                    "No cached assets found for repository '{}'. Run 'penumbra download' first.",
+                    repo.name
+                )));
             }
-        }
-
-        let repos_to_install: Vec<_> = if let Some(filter) = repo_filter {
-            self.config
-                .filter_repositories(&filter)?
-                .into_iter()
-                .cloned()
-                .collect()
         } else {
-            self.config.repositories.clone()
-        };
-
-        if repos_to_install.is_empty() {
-            return Err(InstallerError::NoRepositoriesFound);
+            self.download_repository_assets(repo).await?;
         }
-
-        println!(
-            "Installing {} repositories from cache",
-            repos_to_install.len()
-        );
-
-        for repo in &repos_to_install {
-            println!("\n--- Installing repository from cache: {} ---", repo.name);
-            self.install_cached_repository(repo).await?;
-        }
-
-        println!("Installation complete");
-        Ok(())
-    }
-
-    async fn install_repository(&mut self, repo: &Repository) -> Result<()> {
-        self.download_repository_assets(repo).await?;
 
         if !repo.cleanup.is_empty() {
             println!("   Running cleanup");
@@ -210,32 +193,6 @@ impl InstallationEngine {
     async fn download_repository(&mut self, repo: &Repository) -> Result<()> {
         self.download_repository_assets(repo).await?;
         println!("   {} download complete", repo.name);
-        Ok(())
-    }
-
-    async fn install_cached_repository(&mut self, repo: &Repository) -> Result<()> {
-        let repo_temp_dir = self.temp_dir.join(&repo.name);
-
-        if !repo_temp_dir.exists() {
-            return Err(InstallerError::Config(format!(
-                "No cached assets found for repository '{}'. Run 'penumbra download' first.",
-                repo.name
-            )));
-        }
-
-        if !repo.cleanup.is_empty() {
-            println!("   Running cleanup");
-            for cleanup in &repo.cleanup {
-                self.execute_cleanup_step(cleanup).await?;
-            }
-        }
-
-        println!("   Running installation steps");
-        for step in &repo.installation {
-            self.execute_install_step(step, &repo.name).await?;
-        }
-
-        println!("   {} installation complete", repo.name);
         Ok(())
     }
 
