@@ -29,9 +29,12 @@ jobs:
       - name: Checkout this repo
         uses: actions/checkout@v4
 
-      - name: Install cross (for Linux only)
+      - name: Install dependencies (for Linux only)
         if: ${{ matrix.platform.target == 'x86_64-unknown-linux-musl' }}
-        run: cargo install cross
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools musl-dev libssl-dev pkg-config
+          cargo install cross
 
       - name: Compile
         uses: houseabsolute/actions-rust-cross@v1
