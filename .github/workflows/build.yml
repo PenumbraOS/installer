@@ -33,7 +33,9 @@ jobs:
         if: ${{ matrix.platform.target == 'x86_64-unknown-linux-musl' }}
         run: |
           sudo apt-get update
-          sudo apt-get install -y musl-tools musl-dev libssl-dev pkg-config
+          sudo apt-get install -y musl-tools musl-dev pkg-config
+          # Try to find and install musl OpenSSL packages
+          sudo apt-get install -y libssl-dev openssl-dev || true
           cargo install cross
 
       - name: Compile
@@ -42,6 +44,10 @@ jobs:
           target: ${{ matrix.platform.target }}
           args: "--bin penumbra --release"
           force-use-cross: ${{ matrix.platform.target == 'x86_64-unknown-linux-musl' }}
+        env:
+          OPENSSL_DIR: /usr
+          OPENSSL_LIB_DIR: /usr/lib/x86_64-linux-gnu
+          OPENSSL_INCLUDE_DIR: /usr/include/openssl
 
       - name: Upload
         uses: actions/upload-artifact@v4
