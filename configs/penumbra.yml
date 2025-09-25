@@ -115,14 +115,16 @@ repositories:
         priority_order: ["*MABL*", "*Plugin*"]
         exclude_patterns: ["*Simulator*", "*Android*"]
 
+      - type: "GrantPermissions"
+        grants:
+          - package: "com.penumbraos.mabl.pin"
+            permission: "android.permission.CAMERA"
+
       - type: "SetAppOps"
         ops:
           - package: "com.penumbraos.mabl.pin"
             operation: "MANAGE_EXTERNAL_STORAGE"
             mode: "allow"
-
-      - type: "SetAppOps"
-        ops:
           - package: "com.penumbraos.plugins.openai"
             operation: "MANAGE_EXTERNAL_STORAGE"
             mode: "allow"
