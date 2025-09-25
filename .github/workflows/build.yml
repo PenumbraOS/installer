@@ -59,6 +59,13 @@ jobs:
         with:
           path: artifacts
 
+      - name: Debug artifact structure
+        run: |
+          echo "=== Artifact structure ==="
+          find artifacts -type f -ls
+          echo "=== Files to upload ==="
+          find artifacts -type f
+
       - name: Generate version for build
         run: |
           TODAY=$(date +'%Y-%m-%d')
