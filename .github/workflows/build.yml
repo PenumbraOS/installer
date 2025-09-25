@@ -24,19 +24,18 @@ jobs:
       - name: Checkout this repo
         uses: actions/checkout@v4
 
-      - name: Compile
-        id: compile
-        uses: rust-build/rust-build.action@v1.4.5
+      - name: Build with cross
+        uses: houseabsolute/actions-rust-cross@v0
         with:
-          RUSTTARGET: ${{ matrix.target }}
-          UPLOAD_MODE: none
-          TOOLCHAIN_VERSION: stable
+          command: build
+          target: ${{ matrix.target }}
+          args: --release
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: penumbra-installer-${{ matrix.target }}
-          path: ${{ steps.compile.outputs.BUILT_ARCHIVE }}
+          path: target/${{ matrix.target }}/release/penumbra${{ matrix.target == 'x86_64-pc-windows-gnu' && '.exe' || '' }}
 
   release:
     name: Create Release
