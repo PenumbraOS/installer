@@ -1,6 +1,8 @@
 use glob::glob;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 use tokio::fs;
+use tokio::time::sleep;
 
 use crate::adb::AdbManager;
 use crate::github::GitHubClient;
@@ -322,14 +324,21 @@ impl InstallationEngine {
             }
 
             InstallStep::SetAppOps { ops } => {
-                for op in ops {
-                    println!(
-                        "     Setting app op: {} {} {}",
-                        op.package, op.operation, op.mode
-                    );
-                    self.adb
-                        .set_app_op(&op.package, &op.operation, &op.mode)
-                        .await?;
+                for i in 0..3 {
+                    if i != 0 {
+                        println!("     Delaying 5s to ensure app op changes succeed");
+                        sleep(Duration::from_secs(5)).await;
+                    }
+
+                    for op in ops {
+                        println!(
+                            "     Setting app op: {} {} {}",
+                            op.package, op.operation, op.mode
+                        );
+                        self.adb
+                            .set_app_op(&op.package, &op.operation, &op.mode)
+                            .await?;
+                    }
                 }
             }
 
