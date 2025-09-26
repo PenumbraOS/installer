@@ -1,3 +1,6 @@
+[workspace]
+members = ["src-tauri"]
+
 [package]
 name = "penumbra-installer"
 version = "0.1.0"
@@ -9,6 +12,10 @@ repository = "https://github.com/PenumbraOS/installer"
 [[bin]]
 name = "penumbra"
 path = "src/main.rs"
+
+[lib]
+name = "penumbra_installer"
+path = "src/lib.rs"
 
 [dependencies]
 tokio = { version = "1.0", features = ["full"] }

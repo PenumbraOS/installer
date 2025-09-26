@@ -3,7 +3,8 @@ use serde_json::Value;
 use std::path::{Path, PathBuf};
 use tokio::fs;
 
-use crate::{Result, InstallerError, Repository, VersionSpec};
+use crate::{Result, InstallerError, Repository};
+use crate::config::VersionSpec;
 use crate::platform::Platform;
 
 pub struct GitHubClient {

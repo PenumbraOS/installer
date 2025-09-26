@@ -5,6 +5,11 @@ pub mod error;
 pub mod github;
 pub mod platform;
 
-pub use config::*;
+pub use adb::AdbManager;
+pub use config::{ConfigLoader, InstallConfig};
 pub use engine::InstallationEngine;
-pub use error::*;
+pub use error::{InstallerError, Result};
+
+pub use config::{
+    AppOpGrant, CleanupStep, FilePush, InstallStep, PermissionGrant, Repository, VersionSpec,
+};
