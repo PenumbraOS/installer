@@ -1,6 +1,21 @@
 import React, { useState, useEffect } from "react";
-import { Paper, Group, Title, Button, Text, Alert, Stack, Checkbox, ScrollArea } from "@mantine/core";
-import { IconDownload, IconPlayerStop, IconAlertCircle, IconGitBranch } from "@tabler/icons-react";
+import {
+  Paper,
+  Group,
+  Title,
+  Button,
+  Text,
+  Alert,
+  Stack,
+  Checkbox,
+  ScrollArea,
+} from "@mantine/core";
+import {
+  IconDownload,
+  IconPlayerStop,
+  IconAlertCircle,
+  IconGitBranch,
+} from "@tabler/icons-react";
 import { useTauri, RepositoryInfo } from "../hooks/useTauri";
 
 interface RepositorySelectorProps {
@@ -28,6 +43,7 @@ export const RepositorySelector: React.FC<RepositorySelectorProps> = ({
     try {
       const repos = await api.getAvailableRepositories();
       setRepositories(repos);
+      setSelectedRepos(repos.map((repo) => repo.name));
     } catch (err) {
       console.error("Failed to load repositories:", err);
       setError(
@@ -50,20 +66,8 @@ export const RepositorySelector: React.FC<RepositorySelectorProps> = ({
     );
   };
 
-  const handleSelectAll = () => {
-    if (selectedRepos.length === repositories.length) {
-      setSelectedRepos([]);
-    } else {
-      setSelectedRepos(repositories.map((r) => r.name));
-    }
-  };
-
   const handleInstallSelected = () => {
     onInstall(selectedRepos);
-  };
-
-  const handleInstallAll = () => {
-    onInstall([]);
   };
 
   const canInstall = deviceConnected && !installing;
@@ -126,17 +130,6 @@ export const RepositorySelector: React.FC<RepositorySelectorProps> = ({
 
           {repositories.length > 0 && (
             <Stack gap="sm">
-              <Button
-                onClick={handleSelectAll}
-                disabled={!canInstall}
-                variant="outline"
-                size="sm"
-              >
-                {selectedRepos.length === repositories.length
-                  ? "Deselect All"
-                  : "Select All"}
-              </Button>
-
               <Group gap="xs">
                 <Button
                   onClick={handleInstallSelected}
@@ -145,15 +138,6 @@ export const RepositorySelector: React.FC<RepositorySelectorProps> = ({
                   color="green"
                 >
                   Install Selected ({selectedRepos.length})
-                </Button>
-
-                <Button
-                  onClick={handleInstallAll}
-                  disabled={!canInstall}
-                  leftSection={<IconDownload size={16} />}
-                  variant="light"
-                >
-                  Install All
                 </Button>
 
                 {installing && (
