@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from "react";
+import { Paper, Group, Title, Button, Text, Alert, Stack, Checkbox, ScrollArea } from "@mantine/core";
+import { IconDownload, IconPlayerStop, IconAlertCircle, IconGitBranch } from "@tabler/icons-react";
 import { useTauri, RepositoryInfo } from "../hooks/useTauri";
 
 interface RepositorySelectorProps {
@@ -67,196 +69,113 @@ export const RepositorySelector: React.FC<RepositorySelectorProps> = ({
   const canInstall = deviceConnected && !installing;
 
   return (
-    <div
-      style={{
-        padding: "16px",
-        backgroundColor: "white",
-        borderRadius: "8px",
-        marginBottom: "16px",
-        border: "1px solid #e0e0e0",
-      }}
-    >
-      <h3 style={{ margin: "0 0 12px 0", fontSize: "18px", fontWeight: "600" }}>
+    <Paper withBorder p="md">
+      <Title order={3} size="h4" mb="sm">
         Available Repositories
-      </h3>
+      </Title>
 
       {error && (
-        <div
-          style={{
-            padding: "8px",
-            backgroundColor: "#ffebee",
-            border: "1px solid #ffcdd2",
-            borderRadius: "4px",
-            fontSize: "14px",
-            color: "#c62828",
-            marginBottom: "12px",
-          }}
+        <Alert
+          icon={<IconAlertCircle size={16} />}
+          title="Error"
+          color="red"
+          variant="light"
+          mb="sm"
         >
           {error}
-        </div>
+        </Alert>
       )}
 
       {loading ? (
-        <div style={{ padding: "12px", textAlign: "center", color: "#666" }}>
+        <Text c="dimmed" ta="center" py="xl">
           Loading repositories...
-        </div>
+        </Text>
       ) : (
-        <>
-          <div
-            style={{
-              maxHeight: "150px",
-              overflowY: "auto",
-              marginBottom: "12px",
-              border: "1px solid #e0e0e0",
-              borderRadius: "4px",
-              padding: "8px",
-            }}
-          >
+        <Stack gap="md">
+          <ScrollArea h={150}>
             {repositories.length === 0 ? (
-              <div
-                style={{ padding: "12px", textAlign: "center", color: "#666" }}
-              >
+              <Text c="dimmed" ta="center" py="xl">
                 No repositories available
-              </div>
+              </Text>
             ) : (
-              <div
-                style={{ display: "flex", flexDirection: "column", gap: "8px" }}
-              >
+              <Stack gap="xs">
                 {repositories.map((repo) => (
-                  <label
+                  <Checkbox
                     key={repo.name}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                      padding: "4px",
-                      cursor: canInstall ? "pointer" : "not-allowed",
-                      opacity: canInstall ? 1 : 0.6,
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedRepos.includes(repo.name)}
-                      onChange={() => canInstall && handleRepoToggle(repo.name)}
-                      disabled={!canInstall}
-                      style={{
-                        width: "16px",
-                        height: "16px",
-                        cursor: canInstall ? "pointer" : "not-allowed",
-                      }}
-                    />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: "14px", fontWeight: "500" }}>
-                        {repo.name}
+                    checked={selectedRepos.includes(repo.name)}
+                    onChange={() => canInstall && handleRepoToggle(repo.name)}
+                    disabled={!canInstall}
+                    label={
+                      <div>
+                        <Group gap="xs">
+                          <IconGitBranch size={14} />
+                          <Text size="sm" fw={500}>
+                            {repo.name}
+                          </Text>
+                        </Group>
+                        <Text size="xs" c="dimmed">
+                          {repo.owner}/{repo.repo}
+                        </Text>
                       </div>
-                      <div style={{ fontSize: "12px", color: "#666" }}>
-                        {repo.owner}/{repo.repo}
-                      </div>
-                    </div>
-                  </label>
+                    }
+                  />
                 ))}
-              </div>
+              </Stack>
             )}
-          </div>
+          </ScrollArea>
 
           {repositories.length > 0 && (
-            <>
-              <div style={{ marginBottom: "12px" }}>
-                <button
-                  onClick={handleSelectAll}
-                  disabled={!canInstall}
-                  style={{
-                    padding: "4px 8px",
-                    backgroundColor: "transparent",
-                    color: canInstall ? "#2196F3" : "#ccc",
-                    border: `1px solid ${canInstall ? "#2196F3" : "#ccc"}`,
-                    borderRadius: "4px",
-                    cursor: canInstall ? "pointer" : "not-allowed",
-                    fontSize: "12px",
-                  }}
-                >
-                  {selectedRepos.length === repositories.length
-                    ? "Deselect All"
-                    : "Select All"}
-                </button>
-              </div>
+            <Stack gap="sm">
+              <Button
+                onClick={handleSelectAll}
+                disabled={!canInstall}
+                variant="outline"
+                size="sm"
+              >
+                {selectedRepos.length === repositories.length
+                  ? "Deselect All"
+                  : "Select All"}
+              </Button>
 
-              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                <button
+              <Group gap="xs">
+                <Button
                   onClick={handleInstallSelected}
                   disabled={!canInstall || selectedRepos.length === 0}
-                  style={{
-                    padding: "8px 16px",
-                    backgroundColor:
-                      canInstall && selectedRepos.length > 0
-                        ? "#4CAF50"
-                        : "#ccc",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "4px",
-                    cursor:
-                      canInstall && selectedRepos.length > 0
-                        ? "pointer"
-                        : "not-allowed",
-                    fontWeight: "500",
-                  }}
+                  leftSection={<IconDownload size={16} />}
+                  color="green"
                 >
                   Install Selected ({selectedRepos.length})
-                </button>
+                </Button>
 
-                <button
+                <Button
                   onClick={handleInstallAll}
                   disabled={!canInstall}
-                  style={{
-                    padding: "8px 16px",
-                    backgroundColor: canInstall ? "#2196F3" : "#ccc",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "4px",
-                    cursor: canInstall ? "pointer" : "not-allowed",
-                    fontWeight: "500",
-                  }}
+                  leftSection={<IconDownload size={16} />}
+                  variant="light"
                 >
                   Install All
-                </button>
+                </Button>
 
                 {installing && (
-                  <button
+                  <Button
                     onClick={onCancel}
-                    style={{
-                      padding: "8px 16px",
-                      backgroundColor: "#f44336",
-                      color: "white",
-                      border: "none",
-                      borderRadius: "4px",
-                      cursor: "pointer",
-                      fontWeight: "500",
-                    }}
+                    leftSection={<IconPlayerStop size={16} />}
+                    color="red"
                   >
                     Cancel
-                  </button>
+                  </Button>
                 )}
-              </div>
-            </>
+              </Group>
+            </Stack>
           )}
 
           {!deviceConnected && (
-            <div
-              style={{
-                padding: "8px",
-                backgroundColor: "#fff3e0",
-                border: "1px solid #ffcc02",
-                borderRadius: "4px",
-                fontSize: "14px",
-                color: "#f57c00",
-                marginTop: "8px",
-              }}
-            >
+            <Alert color="orange" variant="light">
               Connect a device to enable installation
-            </div>
+            </Alert>
           )}
-        </>
+        </Stack>
       )}
-    </div>
+    </Paper>
   );
 };

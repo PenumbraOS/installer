@@ -1,4 +1,16 @@
 import React, { useState, useEffect } from "react";
+import {
+  Paper,
+  Group,
+  Title,
+  Button,
+  Text,
+  Alert,
+  Stack,
+  Badge,
+  ScrollArea,
+} from "@mantine/core";
+import { IconRefresh, IconPackage, IconAlertCircle } from "@tabler/icons-react";
 import { useTauri, PackageInfo } from "../hooks/useTauri";
 
 interface PackageListProps {
@@ -38,134 +50,66 @@ export const PackageList: React.FC<PackageListProps> = ({
   }, [deviceConnected]);
 
   return (
-    <div
-      style={{
-        padding: "16px",
-        backgroundColor: "white",
-        borderRadius: "8px",
-        marginBottom: "16px",
-        border: "1px solid #e0e0e0",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: "12px",
-        }}
-      >
-        <h3 style={{ margin: 0, fontSize: "18px", fontWeight: "600" }}>
+    <Paper withBorder p="md">
+      <Group justify="space-between" mb="sm">
+        <Title order={3} size="h4">
           Installed Packages
-        </h3>
-        <button
+        </Title>
+        <Button
           onClick={loadPackages}
           disabled={loading || !deviceConnected}
-          style={{
-            padding: "6px 12px",
-            backgroundColor: deviceConnected ? "#2196F3" : "#ccc",
-            color: "white",
-            border: "none",
-            borderRadius: "4px",
-            cursor: loading || !deviceConnected ? "not-allowed" : "pointer",
-            opacity: loading || !deviceConnected ? 0.6 : 1,
-          }}
+          loading={loading}
+          leftSection={<IconRefresh size={16} />}
+          variant="light"
+          size="sm"
         >
           {loading ? "Loading..." : "Refresh"}
-        </button>
-      </div>
+        </Button>
+      </Group>
 
       {!deviceConnected && (
-        <div
-          style={{
-            padding: "12px",
-            backgroundColor: "#f5f5f5",
-            borderRadius: "4px",
-            fontSize: "14px",
-            color: "#666",
-            fontStyle: "italic",
-          }}
-        >
+        <Alert color="blue" variant="light">
           Connect a device to view installed packages
-        </div>
+        </Alert>
       )}
 
       {error && (
-        <div
-          style={{
-            padding: "8px",
-            backgroundColor: "#ffebee",
-            border: "1px solid #ffcdd2",
-            borderRadius: "4px",
-            fontSize: "14px",
-            color: "#c62828",
-            marginBottom: "8px",
-          }}
+        <Alert
+          icon={<IconAlertCircle size={16} />}
+          title="Error"
+          color="red"
+          variant="light"
+          mb="sm"
         >
           {error}
-        </div>
+        </Alert>
       )}
 
       {deviceConnected && !loading && !error && (
-        <div style={{ maxHeight: "200px", overflowY: "auto" }}>
+        <ScrollArea h={200}>
           {packages.length === 0 ? (
-            <div
-              style={{
-                padding: "12px",
-                backgroundColor: "#f5f5f5",
-                borderRadius: "4px",
-                fontSize: "14px",
-                color: "#666",
-                textAlign: "center",
-              }}
-            >
+            <Text c="dimmed" ta="center" py="xl">
               No relevant packages found
-            </div>
+            </Text>
           ) : (
-            <div
-              style={{ display: "flex", flexDirection: "column", gap: "8px" }}
-            >
+            <Stack gap="xs">
               {packages.map((pkg, index) => (
-                <div
-                  key={index}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    padding: "8px",
-                    backgroundColor: "#f9f9f9",
-                    borderRadius: "4px",
-                    border: "1px solid #e0e0e0",
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: "14px",
-                      fontFamily: "monospace",
-                      fontWeight: "500",
-                    }}
-                  >
-                    {pkg.package_name}
-                  </span>
-                  {pkg.version && (
-                    <span
-                      style={{
-                        fontSize: "12px",
-                        color: "#666",
-                        backgroundColor: "#e0e0e0",
-                        padding: "2px 6px",
-                        borderRadius: "3px",
-                      }}
-                    >
-                      {pkg.version}
-                    </span>
-                  )}
-                </div>
+                <Paper key={index} withBorder p="sm">
+                  <Group justify="space-between" align="center">
+                    <Group gap="xs">
+                      <IconPackage size={16} />
+                      <Text ff="monospace" size="sm" fw={500}>
+                        {pkg.package_name}
+                      </Text>
+                    </Group>
+                    {pkg.version && <Badge size="sm">{pkg.version}</Badge>}
+                  </Group>
+                </Paper>
               ))}
-            </div>
+            </Stack>
           )}
-        </div>
+        </ScrollArea>
       )}
-    </div>
+    </Paper>
   );
 };

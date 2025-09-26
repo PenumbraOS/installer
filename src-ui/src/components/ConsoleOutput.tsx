@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
+import { Paper, Group, Title, Button, Text, ScrollArea, Code, ActionIcon } from "@mantine/core";
+import { IconTrash, IconDownload, IconTerminal } from "@tabler/icons-react";
 import { useInstallationProgress } from "../hooks/useTauri";
 
 interface ConsoleOutputProps {
@@ -48,105 +50,88 @@ export const ConsoleOutput: React.FC<ConsoleOutputProps> = ({ installing }) => {
   }, [installing]);
 
   return (
-    <div
-      style={{
-        padding: "16px",
-        backgroundColor: "white",
-        borderRadius: "8px",
-        border: "1px solid #e0e0e0",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: "12px",
-        }}
-      >
-        <h3 style={{ margin: 0, fontSize: "18px", fontWeight: "600" }}>
+    <Paper withBorder p="md">
+      <Group justify="space-between" mb="sm">
+        <Title order={3} size="h4">
           Installation Progress
-        </h3>
-        <div style={{ display: "flex", gap: "8px" }}>
-          <button
+        </Title>
+        <Group gap="xs">
+          <ActionIcon
             onClick={clearOutput}
             disabled={output.length === 0}
-            style={{
-              padding: "4px 8px",
-              backgroundColor: output.length > 0 ? "#f44336" : "#ccc",
-              color: "white",
-              border: "none",
-              borderRadius: "4px",
-              cursor: output.length > 0 ? "pointer" : "not-allowed",
-              fontSize: "12px",
-            }}
+            color="red"
+            variant="filled"
+            size="sm"
+            title="Clear output"
           >
-            Clear
-          </button>
-          <button
+            <IconTrash size={14} />
+          </ActionIcon>
+          <ActionIcon
             onClick={exportLogs}
             disabled={output.length === 0}
-            style={{
-              padding: "4px 8px",
-              backgroundColor: output.length > 0 ? "#2196F3" : "#ccc",
-              color: "white",
-              border: "none",
-              borderRadius: "4px",
-              cursor: output.length > 0 ? "pointer" : "not-allowed",
-              fontSize: "12px",
-            }}
+            color="blue"
+            variant="filled"
+            size="sm"
             title="Export logs"
           >
-            ⤓
-          </button>
-        </div>
-      </div>
+            <IconDownload size={14} />
+          </ActionIcon>
+        </Group>
+      </Group>
 
-      <div
-        ref={outputRef}
+      <ScrollArea
+        h={200}
+        viewportRef={outputRef}
         style={{
-          height: "200px",
-          overflowY: "auto",
           backgroundColor: "#1a1a1a",
-          color: "#f0f0f0",
-          padding: "12px",
           borderRadius: "4px",
-          fontFamily: 'Monaco, Consolas, "Courier New", monospace',
-          fontSize: "13px",
-          lineHeight: "1.4",
           border: "1px solid #333",
         }}
+        p="sm"
       >
         {output.length === 0 ? (
-          <div style={{ color: "#888", fontStyle: "italic" }}>
-            Installation output will appear here...
-          </div>
+          <Text c="dimmed" fs="italic" ta="center" py="xl">
+            <Group gap="xs" justify="center">
+              <IconTerminal size={16} />
+              Installation output will appear here...
+            </Group>
+          </Text>
         ) : (
-          output.map((line, index) => (
-            <div
-              key={index}
-              style={{
-                marginBottom: "2px",
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-              }}
-            >
-              {line}
-            </div>
-          ))
+          <>
+            {output.map((line, index) => (
+              <Code
+                key={index}
+                block
+                c="gray.0"
+                bg="transparent"
+                style={{
+                  marginBottom: "2px",
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                  fontFamily: 'Monaco, Consolas, "Courier New", monospace',
+                  fontSize: "13px",
+                  lineHeight: "1.4",
+                }}
+              >
+                {line}
+              </Code>
+            ))}
+            {installing && (
+              <Text
+                c="green"
+                fw={700}
+                mt="xs"
+                style={{
+                  fontFamily: 'Monaco, Consolas, "Courier New", monospace',
+                  fontSize: "13px",
+                }}
+              >
+                ● Installation in progress...
+              </Text>
+            )}
+          </>
         )}
-        {installing && (
-          <div
-            style={{
-              color: "#4CAF50",
-              fontWeight: "bold",
-              marginTop: "8px",
-            }}
-          >
-            ● Installation in progress...
-          </div>
-        )}
-      </div>
-    </div>
+      </ScrollArea>
+    </Paper>
   );
 };
