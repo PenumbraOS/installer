@@ -4,7 +4,6 @@ import { useEffect } from "react";
 
 export interface DeviceInfo {
   connected: boolean;
-  device_count: number;
   error_message?: string;
 }
 

@@ -6,17 +6,19 @@ import {
   Title,
   Stack,
 } from "@mantine/core";
-import { DeviceStatus } from "./components/DeviceStatus";
 import { PackageList } from "./components/PackageList";
 import { RepositorySelector } from "./components/RepositorySelector";
 import { ConsoleOutput } from "./components/ConsoleOutput";
 import { useTauri } from "./hooks/useTauri";
 import "@mantine/core/styles.css";
+import { useDeviceConnectionStatus } from "./hooks/useDeviceConnectionStatus";
+import { NoDevice } from "./components/NoDevice";
 
 export const App: React.FC<{}> = () => {
-  const [deviceConnected, setDeviceConnected] = useState(false);
   const [installing, setInstalling] = useState(false);
   const api = useTauri();
+
+  const [deviceInfo, _, checkDevice] = useDeviceConnectionStatus();
 
   const handleInstall = async (selectedRepos: string[]) => {
     setInstalling(true);
@@ -49,15 +51,20 @@ export const App: React.FC<{}> = () => {
               <Title order={1}>PenumbraOS Installer</Title>
             </Stack>
 
-            <DeviceStatus onDeviceChange={setDeviceConnected} />
-            <PackageList deviceConnected={deviceConnected} />
-            <RepositorySelector
-              deviceConnected={deviceConnected}
-              installing={installing}
-              onInstall={handleInstall}
-              onCancel={handleCancel}
-            />
-            <ConsoleOutput installing={installing} />
+            {deviceInfo?.connected ? (
+              <>
+                <PackageList deviceConnected={true} />
+                <RepositorySelector
+                  deviceConnected={true}
+                  installing={installing}
+                  onInstall={handleInstall}
+                  onCancel={handleCancel}
+                />
+                <ConsoleOutput installing={installing} />
+              </>
+            ) : (
+              <NoDevice onReload={checkDevice} />
+            )}
           </Stack>
         </Container>
       </AppShell>
