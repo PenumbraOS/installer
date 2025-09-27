@@ -1,5 +1,6 @@
 .DS_Store
 /target
 /cache
+/src-ui/dist
 /src-ui/node_modules
 /src-tauri/gen

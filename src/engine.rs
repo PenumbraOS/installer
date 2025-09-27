@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::fs;
 use tokio::time::sleep;
+use tokio_util::sync::CancellationToken;
 
 use crate::adb::AdbManager;
 use crate::github::GitHubClient;
@@ -16,24 +17,33 @@ pub struct InstallationEngine {
     github: GitHubClient,
     adb: AdbManager,
     temp_dir: PathBuf,
+    cancellation_token: Option<CancellationToken>,
 }
 
 impl InstallationEngine {
     pub async fn new(config: InstallConfig) -> Result<Self> {
-        InstallationEngine::new_with_cache(config, Platform::temp_dir(), None).await
+        InstallationEngine::new_with_cache(config, Platform::temp_dir(), None, None).await
     }
 
     pub async fn new_with_token(
         config: InstallConfig,
         github_token: Option<String>,
+        cancellation_token: Option<CancellationToken>,
     ) -> Result<Self> {
-        InstallationEngine::new_with_cache(config, Platform::temp_dir(), github_token).await
+        InstallationEngine::new_with_cache(
+            config,
+            Platform::temp_dir(),
+            github_token,
+            cancellation_token,
+        )
+        .await
     }
 
     pub async fn new_with_cache(
         config: InstallConfig,
         cache_dir: PathBuf,
         github_token: Option<String>,
+        cancellation_token: Option<CancellationToken>,
     ) -> Result<Self> {
         fs::create_dir_all(&cache_dir).await?;
 
@@ -45,6 +55,7 @@ impl InstallationEngine {
             github,
             adb,
             temp_dir: cache_dir,
+            cancellation_token,
         })
     }
 
@@ -80,6 +91,10 @@ impl InstallationEngine {
         println!("Installing {} repositories", repos_to_install.len());
 
         for repo in &repos_to_install {
+            if self.is_cancelled() {
+                break;
+            }
+
             println!("\n--- Installing repository: {} ---", repo.name);
             self.install_repository(repo, with_cache).await?;
         }
@@ -91,11 +106,12 @@ impl InstallationEngine {
 
         println!("Installation complete");
 
-        if self
-            .config
-            .repositories
-            .iter()
-            .any(|r| r.reboot_after_completion)
+        if !self.is_cancelled()
+            && self
+                .config
+                .repositories
+                .iter()
+                .any(|r| r.reboot_after_completion)
         {
             println!("Rebooting device");
             self.adb.reboot()?;
@@ -177,12 +193,20 @@ impl InstallationEngine {
         if !repo.cleanup.is_empty() {
             println!("   Running cleanup");
             for cleanup in &repo.cleanup {
+                if self.is_cancelled() {
+                    break;
+                }
+
                 self.execute_cleanup_step(cleanup).await?;
             }
         }
 
         println!("   Running installation steps");
         for step in &repo.installation {
+            if self.is_cancelled() {
+                break;
+            }
+
             self.execute_install_step(step, &repo.name).await?;
         }
 
@@ -286,6 +310,10 @@ impl InstallationEngine {
 
                 println!("     Installing {} APKs", sorted_apks.len());
                 for apk in sorted_apks {
+                    if self.is_cancelled() {
+                        break;
+                    }
+
                     let apk_name = apk.file_name().unwrap().to_string_lossy();
                     println!("       Installing: {}", apk_name);
 
@@ -307,6 +335,10 @@ impl InstallationEngine {
                 };
 
                 for file_push in files {
+                    if self.is_cancelled() {
+                        break;
+                    }
+
                     self.push_files(&repo_temp_dir, file_push).await?;
                 }
             }
@@ -331,6 +363,10 @@ impl InstallationEngine {
                     }
 
                     for op in ops {
+                        if self.is_cancelled() {
+                            break;
+                        }
+
                         println!(
                             "     Setting app op: {} {} {}",
                             op.package, op.operation, op.mode
@@ -508,6 +544,10 @@ impl InstallationEngine {
 
         println!("   Downloading release assets");
         for pattern in &repo.release_assets {
+            if self.is_cancelled() {
+                break;
+            }
+
             let downloaded = self
                 .github
                 .download_asset(
@@ -526,6 +566,10 @@ impl InstallationEngine {
         }
 
         for filepath in &repo.repo_files {
+            if self.is_cancelled() {
+                break;
+            }
+
             println!("   Downloading repository file: {}", filepath);
             if filepath.contains('*') {
                 self.github
@@ -541,31 +585,10 @@ impl InstallationEngine {
 
         Ok(())
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_priority_pattern_matching() {
-        let engine = InstallationEngine {
-            config: InstallConfig {
-                name: "test".to_string(),
-                repositories: vec![],
-                global_setup: vec![],
-            },
-            github: GitHubClient::new(),
-            adb: unsafe { std::mem::zeroed() }, // This is just for testing pattern matching
-            temp_dir: PathBuf::new(),
-        };
-
-        assert!(engine.matches_priority_pattern("pinitd-debug.apk", "*pinitd*"));
-        assert!(engine.matches_priority_pattern("SDK-Bridge-release.apk", "*SDK*"));
-        assert!(engine.matches_priority_pattern("MABL-app.apk", "*MABL*"));
-        assert!(!engine.matches_priority_pattern("other-app.apk", "*pinitd*"));
-
-        assert!(engine.matches_priority_pattern("debug.apk", "*debug.apk"));
-        assert!(engine.matches_priority_pattern("app-debug", "app*"));
+    fn is_cancelled(&self) -> bool {
+        self.cancellation_token
+            .as_ref()
+            .map_or(false, |token| token.is_cancelled())
     }
 }

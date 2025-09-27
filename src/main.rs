@@ -80,10 +80,11 @@ async fn main() -> Result<()> {
                     config,
                     cache_path.clone(),
                     cli.github_token.clone(),
+                    None,
                 )
                 .await?
             } else {
-                InstallationEngine::new_with_token(config, cli.github_token.clone()).await?
+                InstallationEngine::new_with_token(config, cli.github_token.clone(), None).await?
             };
 
             if cache_dir.is_some() {
@@ -96,15 +97,19 @@ async fn main() -> Result<()> {
         Commands::Uninstall { repos } => {
             let config = ConfigLoader::load_builtin("penumbra")?;
             let mut engine =
-                InstallationEngine::new_with_token(config, cli.github_token.clone()).await?;
+                InstallationEngine::new_with_token(config, cli.github_token.clone(), None).await?;
             engine.uninstall(repos).await?;
         }
 
         Commands::Download { repos, cache_dir } => {
             let config = ConfigLoader::load_builtin("penumbra")?;
-            let mut engine =
-                InstallationEngine::new_with_cache(config, cache_dir, cli.github_token.clone())
-                    .await?;
+            let mut engine = InstallationEngine::new_with_cache(
+                config,
+                cache_dir,
+                cli.github_token.clone(),
+                None,
+            )
+            .await?;
             engine.download(repos).await?;
         }
 

@@ -3,11 +3,14 @@
     windows_subsystem = "windows"
 )]
 
-use penumbra_installer::{AdbManager, ConfigLoader, InstallerError, Repository};
+use penumbra_installer::{
+    AdbManager, ConfigLoader, InstallConfig, InstallationEngine, InstallerError, Repository,
+};
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, State};
-use tokio::task::spawn_blocking;
+use tokio::{runtime::Handle, task::spawn_blocking};
+use tokio_util::sync::CancellationToken;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 struct DeviceInfo {
@@ -43,7 +46,7 @@ impl From<&Repository> for RepositoryInfo {
 
 // State for managing the installation process
 struct AppState {
-    installing: Mutex<bool>,
+    cancellation_token: Mutex<Option<CancellationToken>>,
 }
 
 #[tauri::command]
@@ -151,52 +154,84 @@ async fn install_repositories(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    // Check if already installing
-    {
-        let mut installing = state.installing.lock().unwrap();
-        if *installing {
-            return Err("Installation already in progress".to_string());
-        }
-        *installing = true;
-    }
+    let _ = app.emit("installation_progress", "Loading configuration...");
 
-    // For now, simulate installation progress
+    let config = ConfigLoader::load_builtin("penumbra").map_err(|e| {
+        let _ = app.emit(
+            "installation_progress",
+            format!("Error: Failed to load config - {}", e),
+        );
+        format!("Failed to load config: {}", e)
+    })?;
+
     let _ = app.emit("installation_progress", "Starting installation...");
-    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
-    let selected_repos = if repos.is_empty() {
-        "all repositories"
-    } else {
-        "selected repositories"
-    };
-    let _ = app.emit(
-        "installation_progress",
-        format!("Installing {}...", selected_repos),
-    );
-    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+    let cancellation_token = CancellationToken::new();
 
-    let _ = app.emit(
-        "installation_progress",
-        "Installation completed successfully!",
-    );
-
-    // Reset installing state
     {
-        let mut installing = state.installing.lock().unwrap();
-        *installing = false;
+        let mut token = state.cancellation_token.lock().unwrap();
+        *token = Some(cancellation_token.clone());
     }
 
-    Ok("Installation completed successfully".to_string())
+    let installation_result = run_installation(config, repos, cancellation_token.clone()).await;
+
+    {
+        let mut token = state.cancellation_token.lock().unwrap();
+        *token = None;
+    }
+
+    match installation_result {
+        Ok(()) => {
+            let _ = app.emit(
+                "installation_progress",
+                "Installation completed successfully!",
+            );
+            Ok("Installation completed successfully".to_string())
+        }
+        Err(error_msg) => {
+            let _ = app.emit("installation_progress", format!("Error: {}", error_msg));
+            Err(error_msg)
+        }
+    }
+}
+
+async fn run_installation(
+    config: InstallConfig,
+    repos: Vec<String>,
+    cancellation_token: CancellationToken,
+) -> Result<(), String> {
+    spawn_blocking(move || {
+        let rt = Handle::current();
+
+        let mut engine = match rt.block_on(InstallationEngine::new_with_token(
+            config,
+            None,
+            Some(cancellation_token),
+        )) {
+            Ok(engine) => engine,
+            Err(e) => return Err(format!("Failed to initialize installation engine: {}", e)),
+        };
+
+        let repo_filter = if repos.is_empty() { None } else { Some(repos) };
+
+        match rt.block_on(engine.install(repo_filter, false)) {
+            Ok(()) => Ok(()),
+            Err(e) => Err(format!("Installation failed: {}", e)),
+        }
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
 }
 
 #[tauri::command]
 async fn cancel_installation(state: State<'_, AppState>) -> Result<(), String> {
-    // For now, we just reset the installing state
-    // TODO: Implement proper cancellation mechanism
     {
-        let mut installing = state.installing.lock().unwrap();
-        *installing = false;
+        let mut token = state.cancellation_token.lock().unwrap();
+        if let Some(cancellation_token) = token.take() {
+            cancellation_token.cancel();
+        }
     }
+
     Ok(())
 }
 
@@ -204,7 +239,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .manage(AppState {
-            installing: Mutex::new(false),
+            cancellation_token: Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![
             check_device_connection,

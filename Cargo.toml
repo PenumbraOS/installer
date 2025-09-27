@@ -19,16 +19,17 @@ path = "src/lib.rs"
 
 [dependencies]
 tokio = { version = "1.0", features = ["full"] }
-reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
+tokio-util = "0.7"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
 serde_json = "1.0"
-thiserror = "1.0"
+thiserror = "2.0"
 clap = { version = "4.0", features = ["derive", "env"] }
 adb_client = { git = "https://github.com/PenumbraOS/adb_remote_auth" }
 glob = "0.3"
-dirs = "5.0"
-env_logger = "0.10"
+dirs = "6.0"
+env_logger = "0.11"
 
 # For future WASM support
 [target.'cfg(target_arch = "wasm32")'.dependencies]
