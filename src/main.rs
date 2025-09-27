@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use log::{info, warn, error};
 use std::path::PathBuf;
 use tokio;
 
@@ -120,42 +121,40 @@ async fn main() -> Result<()> {
                 ConfigLoader::load_builtin("penumbra")?
             };
 
-            println!("Available repositories in '{}':", config.name);
-            println!();
+            info!("Available repositories in '{}':", config.name);
             for repo in &config.repositories {
-                println!("  {}", repo.name);
-                println!("     Repository: {}/{}", repo.owner, repo.repo);
-                println!("     Version: {:?}", repo.version);
+                info!("  {}", repo.name);
+                info!("     Repository: {}/{}", repo.owner, repo.repo);
+                info!("     Version: {:?}", repo.version);
                 if !repo.release_assets.is_empty() {
-                    println!("     Assets: {}", repo.release_assets.join(", "));
+                    info!("     Assets: {}", repo.release_assets.join(", "));
                 }
                 if !repo.repo_files.is_empty() {
-                    println!("     Files: {}", repo.repo_files.join(", "));
+                    info!("     Files: {}", repo.repo_files.join(", "));
                 }
-                println!();
             }
         }
 
         Commands::Devices => {
             use penumbra_installer::adb::AdbManager;
 
-            println!("Checking device connection...");
+            info!("Checking device connection...");
             match AdbManager::connect().await {
                 Ok(_) => {
-                    println!("Single device connected and ready for installation");
+                    info!("Single device connected and ready for installation");
                 }
                 Err(InstallerError::NoDevice) => {
-                    println!("No Android device connected");
-                    println!("   Please connect a device and enable USB debugging");
+                    warn!("No Android device connected");
+                    warn!("   Please connect a device and enable USB debugging");
                     std::process::exit(1);
                 }
                 Err(InstallerError::MultipleDevices) => {
-                    println!("Multiple devices connected");
-                    println!("   Please connect exactly one device for installation");
+                    warn!("Multiple devices connected");
+                    warn!("   Please connect exactly one device for installation");
                     std::process::exit(1);
                 }
                 Err(e) => {
-                    println!("ADB connection failed: {}", e);
+                    error!("ADB connection failed: {}", e);
                     std::process::exit(1);
                 }
             }

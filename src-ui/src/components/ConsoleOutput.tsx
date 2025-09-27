@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Paper, Group, Title, Button, Text, ScrollArea, Code, ActionIcon } from "@mantine/core";
+import { Paper, Group, Title, Text, ScrollArea, Code, ActionIcon } from "@mantine/core";
 import { IconTrash, IconDownload, IconTerminal } from "@tabler/icons-react";
 import { useInstallationProgress } from "../hooks/useTauri";
 

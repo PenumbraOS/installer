@@ -1,4 +1,5 @@
 use glob::glob;
+use log::{info, warn};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::fs;
@@ -64,10 +65,10 @@ impl InstallationEngine {
         repo_filter: Option<Vec<String>>,
         with_cache: bool,
     ) -> Result<()> {
-        println!("Starting {} installation", self.config.name);
+        info!("Starting {} installation", self.config.name);
 
         if !self.config.global_setup.is_empty() {
-            println!("Running global setup");
+            info!("Running global setup");
             let global_setup = self.config.global_setup.clone();
             for step in &global_setup {
                 self.execute_install_step(step, "global").await?;
@@ -88,23 +89,23 @@ impl InstallationEngine {
             return Err(InstallerError::NoRepositoriesFound);
         }
 
-        println!("Installing {} repositories", repos_to_install.len());
+        info!("Installing {} repositories", repos_to_install.len());
 
         for repo in &repos_to_install {
             if self.is_cancelled() {
                 break;
             }
 
-            println!("\n--- Installing repository: {} ---", repo.name);
+            info!("Installing repository: {}", repo.name);
             self.install_repository(repo, with_cache).await?;
         }
 
         if !with_cache {
-            println!("Cleaning up temporary files");
+            info!("Cleaning up temporary files");
             fs::remove_dir_all(&self.temp_dir).await?;
         }
 
-        println!("Installation complete");
+        info!("Installation complete");
 
         if !self.is_cancelled()
             && self
@@ -113,7 +114,7 @@ impl InstallationEngine {
                 .iter()
                 .any(|r| r.reboot_after_completion)
         {
-            println!("Rebooting device");
+            info!("Rebooting device");
             self.adb.reboot()?;
         }
 
@@ -121,7 +122,7 @@ impl InstallationEngine {
     }
 
     pub async fn uninstall(&mut self, repo_filter: Option<Vec<String>>) -> Result<()> {
-        println!("Starting {} uninstall", self.config.name);
+        info!("Starting {} uninstall", self.config.name);
 
         let repos_to_uninstall: Vec<_> = if let Some(filter) = repo_filter {
             self.config
@@ -137,19 +138,19 @@ impl InstallationEngine {
             return Err(InstallerError::NoRepositoriesFound);
         }
 
-        println!("Uninstalling {} repositories", repos_to_uninstall.len());
+        info!("Uninstalling {} repositories", repos_to_uninstall.len());
 
         for repo in repos_to_uninstall.iter().rev() {
-            println!("\n--- Uninstalling repository: {} ---", repo.name);
+            info!("Uninstalling repository: {}", repo.name);
             self.uninstall_repository(repo).await?;
         }
 
-        println!("Uninstallation complete");
+        info!("Uninstallation complete");
         Ok(())
     }
 
     pub async fn download(&mut self, repo_filter: Option<Vec<String>>) -> Result<()> {
-        println!("Starting {} asset download", self.config.name);
+        info!("Starting {} asset download", self.config.name);
 
         let repos_to_download: Vec<_> = if let Some(filter) = repo_filter {
             self.config
@@ -165,14 +166,14 @@ impl InstallationEngine {
             return Err(InstallerError::NoRepositoriesFound);
         }
 
-        println!("Downloading {} repositories", repos_to_download.len());
+        info!("Downloading {} repositories", repos_to_download.len());
 
         for repo in &repos_to_download {
-            println!("\n--- Downloading repository: {} ---", repo.name);
+            info!("Downloading repository: {}", repo.name);
             self.download_repository(repo).await?;
         }
 
-        println!("Download complete - assets cached for installation");
+        info!("Download complete - assets cached for installation");
         Ok(())
     }
 
@@ -191,7 +192,7 @@ impl InstallationEngine {
         }
 
         if !repo.cleanup.is_empty() {
-            println!("   Running cleanup");
+            info!("Running cleanup for {}", repo.name);
             for cleanup in &repo.cleanup {
                 if self.is_cancelled() {
                     break;
@@ -201,7 +202,7 @@ impl InstallationEngine {
             }
         }
 
-        println!("   Running installation steps");
+        info!("Running installation steps for {}", repo.name);
         for step in &repo.installation {
             if self.is_cancelled() {
                 break;
@@ -210,28 +211,28 @@ impl InstallationEngine {
             self.execute_install_step(step, &repo.name).await?;
         }
 
-        println!("   {} installation complete", repo.name);
+        info!("{} installation complete", repo.name);
         Ok(())
     }
 
     async fn uninstall_repository(&mut self, repo: &Repository) -> Result<()> {
         if repo.cleanup.is_empty() {
-            println!("   No cleanup steps defined for {}", repo.name);
+            info!("No cleanup steps defined for {}", repo.name);
             return Ok(());
         }
 
-        println!("   Running cleanup steps");
+        info!("Running cleanup steps for {}", repo.name);
         for cleanup in &repo.cleanup {
             self.execute_cleanup_step(cleanup).await?;
         }
 
-        println!("   {} uninstallation complete", repo.name);
+        info!("{} uninstallation complete", repo.name);
         Ok(())
     }
 
     async fn download_repository(&mut self, repo: &Repository) -> Result<()> {
         self.download_repository_assets(repo).await?;
-        println!("   {} download complete", repo.name);
+        info!("{} download complete", repo.name);
         Ok(())
     }
 
@@ -241,30 +242,30 @@ impl InstallationEngine {
                 for pattern in patterns {
                     let packages = self.find_packages_matching_pattern(pattern).await?;
                     for package in packages {
-                        println!("     Uninstalling: {}", package);
+                        info!("Uninstalling package: {}", package);
                         self.adb.uninstall_package(&package).await?;
                     }
                 }
             }
             CleanupStep::RemoveDirectories { paths } => {
                 for path in paths {
-                    println!("     Removing directory: {}", path);
+                    info!("Removing directory: {}", path);
                     self.adb.remove_directory(path).await?;
                 }
             }
             CleanupStep::RemoveDirectoriesIfEmpty { paths } => {
                 for path in paths {
                     if self.is_directory_empty(path).await? {
-                        println!("     Removing empty directory: {}", path);
+                        info!("Removing empty directory: {}", path);
                         self.adb.remove_directory(path).await?;
                     } else {
-                        println!("     Directory not empty, skipping: {}", path);
+                        warn!("Directory not empty, skipping: {}", path);
                     }
                 }
             }
             CleanupStep::RemoveFiles { paths } => {
                 for path in paths {
-                    println!("     Removing file: {}", path);
+                    info!("Removing file: {}", path);
                     self.adb.remove_file(path).await?;
                 }
             }
@@ -276,7 +277,7 @@ impl InstallationEngine {
         match step {
             InstallStep::CreateDirectories { paths } => {
                 for path in paths {
-                    println!("     Creating directory: {}", path);
+                    info!("Creating directory: {}", path);
                     self.adb.create_directory(path).await?;
                 }
             }
@@ -302,25 +303,25 @@ impl InstallationEngine {
                 });
 
                 if apks.is_empty() {
-                    println!("     No APK files found to install");
+                    info!("No APK files found to install");
                     return Ok(());
                 }
 
                 let sorted_apks = self.sort_apks_by_priority(&apks, priority_order);
 
-                println!("     Installing {} APKs", sorted_apks.len());
+                info!("Installing {} APKs", sorted_apks.len());
                 for apk in sorted_apks {
                     if self.is_cancelled() {
                         break;
                     }
 
                     let apk_name = apk.file_name().unwrap().to_string_lossy();
-                    println!("       Installing: {}", apk_name);
+                    info!("Installing APK: {}", apk_name);
 
                     match self.adb.install_apk(&apk).await {
-                        Ok(()) => println!("       Installed: {}", apk_name),
+                        Ok(()) => info!("Installed APK: {}", apk_name),
                         Err(e) if *allow_failures => {
-                            println!("       Failed to install {} (continuing): {}", apk_name, e);
+                            warn!("Failed to install {} (continuing): {}", apk_name, e);
                         }
                         Err(e) => return Err(e),
                     }
@@ -345,8 +346,8 @@ impl InstallationEngine {
 
             InstallStep::GrantPermissions { grants } => {
                 for grant in grants {
-                    println!(
-                        "     Granting permission: {} to {}",
+                    info!(
+                        "Granting permission: {} to {}",
                         grant.permission, grant.package
                     );
                     self.adb
@@ -358,7 +359,7 @@ impl InstallationEngine {
             InstallStep::SetAppOps { ops } => {
                 for i in 0..3 {
                     if i != 0 {
-                        println!("     Delaying 5s to ensure app op changes succeed");
+                        info!("Delaying 5s to ensure app op changes succeed");
                         sleep(Duration::from_secs(5)).await;
                     }
 
@@ -367,8 +368,8 @@ impl InstallationEngine {
                             break;
                         }
 
-                        println!(
-                            "     Setting app op: {} {} {}",
+                        info!(
+                            "Setting app op: {} {} {}",
                             op.package, op.operation, op.mode
                         );
                         self.adb
@@ -382,22 +383,22 @@ impl InstallationEngine {
                 command,
                 ignore_failure,
             } => {
-                println!("     Running command: {}", command);
+                info!("Running command: {}", command);
                 match self.adb.shell(command).await {
                     Ok(output) => {
                         if !output.is_empty() {
-                            println!("       Output: {}", output);
+                            info!("Command output: {}", output);
                         }
                     }
                     Err(e) if *ignore_failure => {
-                        println!("       Command failed (ignoring): {}", e);
+                        warn!("Command failed (ignoring): {}", e);
                     }
                     Err(e) => return Err(e),
                 }
             }
 
             InstallStep::SetLauncher { component } => {
-                println!("     Setting launcher: {}", component);
+                info!("Setting launcher: {}", component);
                 self.adb.set_launcher(component).await?;
             }
 
@@ -407,11 +408,11 @@ impl InstallationEngine {
                 only_if_missing,
             } => {
                 if *only_if_missing && self.adb.file_exists(path).await? {
-                    println!("     Config already exists: {}", path);
+                    info!("Config already exists: {}", path);
                     return Ok(());
                 }
 
-                println!("     Creating config: {}", path);
+                info!("Creating config: {}", path);
                 self.adb.write_file(path, content).await?;
             }
         }
@@ -435,8 +436,8 @@ impl InstallationEngine {
                 file_push.remote.clone()
             };
 
-            println!(
-                "     Pushing: {} -> {}",
+            info!(
+                "Pushing: {} -> {}",
                 local_file.file_name().unwrap().to_string_lossy(),
                 remote_path
             );
@@ -535,14 +536,14 @@ impl InstallationEngine {
 
     async fn download_repository_assets(&mut self, repo: &Repository) -> Result<()> {
         let version = self.github.get_version(repo).await?;
-        println!("   Version: {}", version);
+        info!("Version: {}", version);
 
         let repo_temp_dir = self.temp_dir.join(&repo.name);
         fs::create_dir_all(&repo_temp_dir).await?;
 
         let exclude_patterns = self.get_exclusion_patterns(repo);
 
-        println!("   Downloading release assets");
+        info!("Downloading release assets");
         for pattern in &repo.release_assets {
             if self.is_cancelled() {
                 break;
@@ -561,7 +562,7 @@ impl InstallationEngine {
                 .await?;
 
             if downloaded.is_empty() {
-                println!("   No release assets found for pattern: {}", pattern);
+                warn!("No release assets found for pattern: {}", pattern);
             }
         }
 
@@ -570,7 +571,7 @@ impl InstallationEngine {
                 break;
             }
 
-            println!("   Downloading repository file: {}", filepath);
+            info!("Downloading repository file: {}", filepath);
             if filepath.contains('*') {
                 self.github
                     .download_file(&repo.owner, &repo.repo, &version, filepath, &repo_temp_dir)

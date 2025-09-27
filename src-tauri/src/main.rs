@@ -3,14 +3,57 @@
     windows_subsystem = "windows"
 )]
 
+use log::{warn, Level, Metadata, Record};
+use once_cell::sync::Lazy;
 use penumbra_installer::{
     AdbManager, ConfigLoader, InstallConfig, InstallationEngine, InstallerError, Repository,
 };
 use serde::{Deserialize, Serialize};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, State};
 use tokio::{runtime::Handle, task::spawn_blocking};
 use tokio_util::sync::CancellationToken;
+
+struct TauriLogger {
+    app_handle: Arc<Mutex<Option<AppHandle>>>,
+}
+
+impl TauriLogger {
+    fn new() -> Self {
+        Self {
+            app_handle: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    fn set_app_handle(&self, app: AppHandle) {
+        let mut handle = self.app_handle.lock().unwrap();
+        *handle = Some(app);
+    }
+}
+
+impl log::Log for TauriLogger {
+    fn enabled(&self, metadata: &Metadata) -> bool {
+        metadata.level() <= Level::Info
+    }
+
+    fn log(&self, record: &Record) {
+        if self.enabled(record.metadata()) {
+            let message = format!("{}", record.args());
+
+            println!("{message}");
+
+            if let Ok(handle_guard) = self.app_handle.lock() {
+                if let Some(ref app) = *handle_guard {
+                    let _ = app.emit("installation_progress", &message);
+                }
+            }
+        }
+    }
+
+    fn flush(&self) {}
+}
+
+static LOGGER: Lazy<TauriLogger> = Lazy::new(|| TauriLogger::new());
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 struct DeviceInfo {
@@ -229,6 +272,7 @@ async fn cancel_installation(state: State<'_, AppState>) -> Result<(), String> {
         let mut token = state.cancellation_token.lock().unwrap();
         if let Some(cancellation_token) = token.take() {
             cancellation_token.cancel();
+            warn!("Cancelled installation");
         }
     }
 
@@ -236,6 +280,10 @@ async fn cancel_installation(state: State<'_, AppState>) -> Result<(), String> {
 }
 
 fn main() {
+    log::set_logger(&*LOGGER)
+        .map(|()| log::set_max_level(log::LevelFilter::Info))
+        .expect("Failed to initialize logger");
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .manage(AppState {
@@ -248,6 +296,10 @@ fn main() {
             install_repositories,
             cancel_installation
         ])
+        .setup(|app| {
+            LOGGER.set_app_handle(app.handle().clone());
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

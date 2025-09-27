@@ -1,3 +1,4 @@
+use log::{info, warn};
 use reqwest::Client;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
@@ -101,7 +102,7 @@ impl GitHubClient {
                 });
                 
                 if should_exclude {
-                    println!("  Skipping excluded asset: {}", name);
+                    info!("  Skipping excluded asset: {}", name);
                     continue;
                 }
                 
@@ -112,12 +113,12 @@ impl GitHubClient {
                 self.download_file_from_url(download_url, &dest_path).await?;
                 downloaded_files.push(dest_path);
                 
-                println!("  Downloaded: {}", name);
+                info!("  Downloaded: {}", name);
             }
         }
         
         if downloaded_files.is_empty() {
-            println!("  No assets found matching pattern: {}", pattern);
+            warn!("  No assets found matching pattern: {}", pattern);
         }
         
         Ok(downloaded_files)
@@ -169,7 +170,7 @@ impl GitHubClient {
                                       owner, repo, version, base_path.trim_end_matches('/'), name);
                 let dest_path = dest_dir.join(name);
                 self.download_file_from_url(&file_url, &dest_path).await?;
-                println!("  Downloaded: {}", name);
+                info!("  Downloaded: {}", name);
             }
         }
         
