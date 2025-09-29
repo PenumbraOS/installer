@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use log::{info, warn, error};
+use log::{error, info, warn};
 use std::path::PathBuf;
 use tokio;
 

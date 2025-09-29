@@ -3,14 +3,17 @@
     windows_subsystem = "windows"
 )]
 
+mod setup;
+
 use log::{warn, Level, Metadata, Record};
 use once_cell::sync::Lazy;
 use penumbra_installer::{
     AdbManager, ConfigLoader, InstallConfig, InstallationEngine, InstallerError, Repository,
 };
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::{runtime::Handle, task::spawn_blocking};
 use tokio_util::sync::CancellationToken;
 
@@ -90,6 +93,49 @@ impl From<&Repository> for RepositoryInfo {
 // State for managing the installation process
 struct AppState {
     cancellation_token: Mutex<Option<CancellationToken>>,
+}
+
+#[tauri::command]
+fn load_setup_config(state: State<'_, setup::SetupState>) -> Result<setup::SetupConfig, String> {
+    state.get_config()
+}
+
+#[tauri::command]
+fn set_adb_key_from_file(
+    path: String,
+    state: State<'_, setup::SetupState>,
+) -> Result<setup::SetupConfig, String> {
+    state.set_local_file(PathBuf::from(path))
+}
+
+#[tauri::command]
+fn set_adb_key_remote(
+    url: String,
+    state: State<'_, setup::SetupState>,
+) -> Result<setup::SetupConfig, String> {
+    state.set_remote_server(url)
+}
+
+#[tauri::command]
+fn set_adb_key_from_bytes(
+    filename: String,
+    data: Vec<u8>,
+    state: State<'_, setup::SetupState>,
+) -> Result<setup::SetupConfig, String> {
+    state.set_local_bytes(filename, data)
+}
+
+#[tauri::command]
+fn clear_adb_key(state: State<'_, setup::SetupState>) -> Result<setup::SetupConfig, String> {
+    state.clear_adb_source()
+}
+
+#[tauri::command]
+fn set_github_token(
+    token: Option<String>,
+    state: State<'_, setup::SetupState>,
+) -> Result<setup::SetupConfig, String> {
+    state.set_github_token(token)
 }
 
 #[tauri::command]
@@ -290,6 +336,12 @@ fn main() {
             cancellation_token: Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![
+            load_setup_config,
+            set_adb_key_from_file,
+            set_adb_key_from_bytes,
+            set_adb_key_remote,
+            clear_adb_key,
+            set_github_token,
             check_device_connection,
             list_installed_packages,
             get_available_repositories,
@@ -298,6 +350,10 @@ fn main() {
         ])
         .setup(|app| {
             LOGGER.set_app_handle(app.handle().clone());
+
+            let setup_state = setup::SetupState::initialize(app)
+                .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
+            app.manage(setup_state);
             Ok(())
         })
         .run(tauri::generate_context!())
