@@ -8,57 +8,86 @@ pub struct AdbManager {
 }
 
 impl AdbManager {
-    pub async fn connect() -> Result<Self> {
+    pub async fn connect(remote_auth_url: Option<String>) -> Result<Self> {
+        let server = Self::connect_server(remote_auth_url.clone());
+
+        if let Some(server) = server {
+            server
+        } else {
+            // Fall back to USB
+            Self::connect_usb(remote_auth_url)
+                .unwrap_or(Err(InstallerError::Adb("Failed all transports".into())))
+        }
+    }
+
+    fn connect_server(remote_auth_url: Option<String>) -> Option<Result<AdbManager>> {
+        if remote_auth_url.is_some() {
+            // Cannot use remote auth with normal ADB server
+            return None;
+        }
+
         let addr = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 5037);
         let mut server = ADBServer::new(addr);
 
-        if let Ok(devices) = server.devices() {
-            match devices.len() {
-                0 => Err(InstallerError::NoDevice),
-                1 => {
-                    let device_info = devices.into_iter().next().unwrap();
+        let devices = server.devices();
 
-                    match device_info.state {
-                        adb_client::DeviceState::Device => {
-                            // TODO: Check if device is Pin
-                            let device =
-                                server.get_device_by_name(&device_info.identifier).map_err(
-                                    |e| InstallerError::Adb(format!("Failed to get device: {}", e)),
-                                )?;
+        let devices = devices.unwrap();
+        let result = match devices.len() {
+            0 => Err(InstallerError::NoDevice),
+            1 => {
+                let device_info = devices.into_iter().next().unwrap();
 
-                            Ok(Self {
+                match device_info.state {
+                    adb_client::DeviceState::Device => {
+                        // TODO: Check if device is Pin
+                        let device =
+                            server
+                                .get_device_by_name(&device_info.identifier)
+                                .map_err(|e| {
+                                    InstallerError::Adb(format!("Failed to get device: {}", e))
+                                });
+
+                        match device {
+                            Ok(device) => Ok(Self {
                                 device: Box::new(device),
-                            })
+                            }),
+                            Err(err) => Err(err),
                         }
-                        adb_client::DeviceState::Unauthorized => Err(InstallerError::Adb(
-                            "Device unauthorized. Please enable USB debugging".to_string(),
-                        )),
-                        _ => Err(InstallerError::Adb(format!(
-                            "Device not ready: {:?}",
-                            device_info.state
-                        ))),
                     }
+                    adb_client::DeviceState::Unauthorized => Err(InstallerError::Adb(
+                        "Device unauthorized. Please ensure you have installed your ADB cert to .android and confirm the USB debugging prompt on your Pin's laser".to_string(),
+                    )),
+                    _ => Err(InstallerError::Adb(format!(
+                        "Device not ready: {:?}",
+                        device_info.state
+                    ))),
                 }
-                _ => Err(InstallerError::MultipleDevices),
             }
-        } else {
-            // Fall back to USB
-            // TODO: This may fail randomly due to https://github.com/cocool97/adb_client/issues/108
-            let device = ADBUSBDevice::autodetect(None).map_err(|e| match e {
-                adb_client::RustADBError::DeviceNotFound(msg) => {
-                    if msg.contains("two Android devices") {
-                        InstallerError::MultipleDevices
-                    } else {
-                        InstallerError::NoDevice
-                    }
-                }
-                _ => InstallerError::Adb(format!("Failed to connect to USB device: {}", e)),
-            })?;
+            _ => Err(InstallerError::MultipleDevices),
+        };
 
-            Ok(Self {
+        Some(result)
+    }
+
+    fn connect_usb(remote_auth_url: Option<String>) -> Option<Result<AdbManager>> {
+        // TODO: This may fail randomly due to https://github.com/cocool97/adb_client/issues/108
+        let device = ADBUSBDevice::autodetect(remote_auth_url).map_err(|e| match e {
+            adb_client::RustADBError::DeviceNotFound(msg) => {
+                if msg.contains("two Android devices") {
+                    InstallerError::MultipleDevices
+                } else {
+                    InstallerError::NoDevice
+                }
+            }
+            _ => InstallerError::Adb(format!("Failed to connect to USB device: {}", e)),
+        });
+
+        Some(match device {
+            Ok(device) => Ok(Self {
                 device: Box::new(device),
-            })
-        }
+            }),
+            Err(err) => Err(err),
+        })
     }
 
     pub async fn install_apk(&mut self, path: &Path) -> Result<()> {

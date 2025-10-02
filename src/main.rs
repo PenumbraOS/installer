@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use log::{info, warn, error};
+use log::{error, info, warn};
 use std::path::PathBuf;
 use tokio;
 
@@ -32,10 +32,16 @@ enum Commands {
         config: Option<PathBuf>,
         #[arg(long)]
         config_url: Option<String>,
+        /// URL for remote ADB authentication
+        #[clap(short = 'a', long = "remote-auth-url")]
+        remote_auth_url: Option<String>,
     },
     Uninstall {
         #[arg(long, value_delimiter = ',')]
         repos: Option<Vec<String>>,
+        /// URL for remote ADB authentication
+        #[clap(short = 'a', long = "remote-auth-url")]
+        remote_auth_url: Option<String>,
     },
     Download {
         #[arg(long, value_delimiter = ',')]
@@ -46,7 +52,11 @@ enum Commands {
     List {
         config: Option<PathBuf>,
     },
-    Devices,
+    Devices {
+        /// URL for remote ADB authentication
+        #[clap(short = 'a', long = "remote-auth-url")]
+        remote_auth_url: Option<String>,
+    },
 }
 
 #[tokio::main]
@@ -65,6 +75,7 @@ async fn main() -> Result<()> {
             cache_dir,
             config,
             config_url,
+            remote_auth_url,
         } => {
             let config = match (config, config_url) {
                 (None, None) => ConfigLoader::load_builtin("penumbra"),
@@ -81,11 +92,18 @@ async fn main() -> Result<()> {
                     config,
                     cache_path.clone(),
                     cli.github_token.clone(),
+                    remote_auth_url,
                     None,
                 )
                 .await?
             } else {
-                InstallationEngine::new_with_token(config, cli.github_token.clone(), None).await?
+                InstallationEngine::new_with_token(
+                    config,
+                    cli.github_token.clone(),
+                    remote_auth_url,
+                    None,
+                )
+                .await?
             };
 
             if cache_dir.is_some() {
@@ -95,10 +113,18 @@ async fn main() -> Result<()> {
             }
         }
 
-        Commands::Uninstall { repos } => {
+        Commands::Uninstall {
+            repos,
+            remote_auth_url,
+        } => {
             let config = ConfigLoader::load_builtin("penumbra")?;
-            let mut engine =
-                InstallationEngine::new_with_token(config, cli.github_token.clone(), None).await?;
+            let mut engine = InstallationEngine::new_with_token(
+                config,
+                cli.github_token.clone(),
+                remote_auth_url,
+                None,
+            )
+            .await?;
             engine.uninstall(repos).await?;
         }
 
@@ -108,6 +134,7 @@ async fn main() -> Result<()> {
                 config,
                 cache_dir,
                 cli.github_token.clone(),
+                None,
                 None,
             )
             .await?;
@@ -135,11 +162,11 @@ async fn main() -> Result<()> {
             }
         }
 
-        Commands::Devices => {
+        Commands::Devices { remote_auth_url } => {
             use penumbra_installer::adb::AdbManager;
 
             info!("Checking device connection...");
-            match AdbManager::connect().await {
+            match AdbManager::connect(remote_auth_url).await {
                 Ok(_) => {
                     info!("Single device connected and ready for installation");
                 }

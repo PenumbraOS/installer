@@ -25,6 +25,9 @@ installer install --cache_dir cache
 # Install using a GitHub PAT for downloads
 installer install --github-token [SOME_PAT]
 
+# Install using a remote signing server
+installer install --remote-auth-url [SOME_SIGNING_URL]
+
 # Download to local cache
 installer download --cache_dir cache
 ```

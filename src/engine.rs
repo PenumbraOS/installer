@@ -22,19 +22,17 @@ pub struct InstallationEngine {
 }
 
 impl InstallationEngine {
-    pub async fn new(config: InstallConfig) -> Result<Self> {
-        InstallationEngine::new_with_cache(config, Platform::temp_dir(), None, None).await
-    }
-
     pub async fn new_with_token(
         config: InstallConfig,
         github_token: Option<String>,
+        remote_auth_url: Option<String>,
         cancellation_token: Option<CancellationToken>,
     ) -> Result<Self> {
         InstallationEngine::new_with_cache(
             config,
             Platform::temp_dir(),
             github_token,
+            remote_auth_url,
             cancellation_token,
         )
         .await
@@ -44,12 +42,13 @@ impl InstallationEngine {
         config: InstallConfig,
         cache_dir: PathBuf,
         github_token: Option<String>,
+        remote_auth_url: Option<String>,
         cancellation_token: Option<CancellationToken>,
     ) -> Result<Self> {
         fs::create_dir_all(&cache_dir).await?;
 
         let github = GitHubClient::new_with_token(github_token);
-        let adb = AdbManager::connect().await?;
+        let adb = AdbManager::connect(remote_auth_url).await?;
 
         Ok(Self {
             config,
