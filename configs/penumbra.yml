@@ -150,3 +150,9 @@ repositories:
 
       - type: "SetLauncher"
         component: "com.penumbraos.mabl.pin/.MainActivity"
+
+      # TODO: This is temporary mechanism to improve debugging. It will slow down user devices
+      # ane make logs messy
+      - type: "RunCommand"
+        command: "setprop persist.log.tag V"
+        ignore_failure: true
