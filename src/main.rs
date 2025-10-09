@@ -3,7 +3,9 @@ use log::{error, info, warn};
 use std::path::PathBuf;
 use tokio;
 
-use penumbra_installer::{ConfigLoader, InstallationEngine, InstallerError, Result};
+use penumbra_installer::{
+    logs::dump_logcat, ConfigLoader, InstallationEngine, InstallerError, Result,
+};
 
 #[derive(Parser)]
 #[command(name = "penumbra")]
@@ -53,6 +55,14 @@ enum Commands {
         config: Option<PathBuf>,
     },
     Devices {
+        /// URL for remote ADB authentication
+        #[clap(short = 'a', long = "remote-auth-url")]
+        remote_auth_url: Option<String>,
+    },
+    DumpLogs {
+        #[clap(short = 's', long = "stream")]
+        stream: bool,
+
         /// URL for remote ADB authentication
         #[clap(short = 'a', long = "remote-auth-url")]
         remote_auth_url: Option<String>,
@@ -186,6 +196,14 @@ async fn main() -> Result<()> {
                 }
             }
         }
+
+        Commands::DumpLogs {
+            stream,
+            remote_auth_url,
+        } => match dump_logcat(stream, remote_auth_url).await {
+            Ok(_) => {}
+            Err(err) => println!("Dump error: {err}"),
+        },
     }
 
     Ok(())
