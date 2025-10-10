@@ -30,4 +30,10 @@ installer install --remote-auth-url [SOME_SIGNING_URL]
 
 # Download to local cache
 installer download --cache_dir cache
+
+# Dump current logs to file
+installer dump-logs
+
+# Dump logs, streaming to file until CTRL-C is pressed
+installer dump-logs --stream
 ```
