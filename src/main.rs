@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use tokio;
 
 use penumbra_installer::{
-    logs::dump_logcat, ConfigLoader, InstallationEngine, InstallerError, Result,
+    logs::dump_logcat_and_exit, ConfigLoader, InstallationEngine, InstallerError, Result,
 };
 
 #[derive(Parser)]
@@ -200,10 +200,7 @@ async fn main() -> Result<()> {
         Commands::DumpLogs {
             stream,
             remote_auth_url,
-        } => match dump_logcat(stream, remote_auth_url).await {
-            Ok(_) => {}
-            Err(err) => println!("Dump error: {err}"),
-        },
+        } => dump_logcat_and_exit(stream, remote_auth_url).await,
     }
 
     Ok(())

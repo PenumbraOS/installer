@@ -1,10 +1,12 @@
+use crate::logs::LineBuffer;
 use crate::{InstallerError, Result};
 use adb_client::{ADBDeviceExt, ADBServer, ADBUSBDevice};
+use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::path::Path;
 
 pub struct AdbManager {
-    device: Box<dyn ADBDeviceExt>,
+    device: Box<dyn ADBDeviceExt + Send>,
 }
 
 impl AdbManager {
@@ -124,6 +126,18 @@ impl AdbManager {
 
         let output_str = String::from_utf8_lossy(&output);
         Ok(output_str.trim().to_string())
+    }
+
+    pub fn shell_stream<T>(&mut self, command: &str, writer: T) -> Result<()>
+    where
+        T: Write,
+    {
+        let cmd_parts: Vec<&str> = command.split_whitespace().collect();
+        let mut line_buffer = LineBuffer::new(writer);
+
+        self.device
+            .shell_command(&cmd_parts, &mut line_buffer)
+            .map_err(|e| InstallerError::Adb(format!("Failed to run shell command: {}", e)))
     }
 
     pub async fn push_file(&mut self, local: &Path, remote: &str) -> Result<()> {
