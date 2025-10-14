@@ -11,7 +11,7 @@ Installer for PenumbraOS on Humane Ai Pin.
 
 ```bash
 # Install all PenumbraOS components
-installer install
+installer install --llm-api-url [URL] --llm-api-key [API KEY] --llm-api-model-name [NAME]
 
 # Uninstall all PenumbraOS components
 installer uninstall
