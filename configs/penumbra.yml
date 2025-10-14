@@ -1,5 +1,16 @@
 name: "PenumbraOS"
 
+variables:
+  - name: "llm-api-url"
+    description: "Base URL for OpenAI compatible API"
+    required: true
+  - name: "llm-api-key"
+    description: "API key for OpenAI compatible API"
+    required: true
+  - name: "llm-api-model-name"
+    description: "API model name for OpenAI compatible API"
+    required: true
+
 # Optional: Run once before any repository installation
 global_setup:
   - type: "RunCommand"
@@ -141,10 +152,10 @@ repositories:
           {
             "configs": [
               {
-                "name": "Gemini 2.5 Flash",
-                "apiKey": "api-key-here",
-                "model": "gemini-2.5-flash",
-                "baseUrl": "https://generativelanguage.googleapis.com/v1beta/openai/"
+                "name": "{{llm-api-model-name}}",
+                "apiKey": "{{llm-api-url}}",
+                "model": "{{llm-api-model-name}}",
+                "baseUrl": "{{llm-api-key}}"
               }
             ]
           }

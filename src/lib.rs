@@ -12,5 +12,6 @@ pub use engine::InstallationEngine;
 pub use error::{InstallerError, Result};
 
 pub use config::{
-    AppOpGrant, CleanupStep, FilePush, InstallStep, PermissionGrant, Repository, VersionSpec,
+    AppOpGrant, CleanupStep, ConfigVariable, FilePush, InstallStep, PermissionGrant, Repository,
+    VersionSpec,
 };

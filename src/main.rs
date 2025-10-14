@@ -1,5 +1,6 @@
 use clap::{Parser, Subcommand};
 use log::{error, info, warn};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use tokio;
 
@@ -37,6 +38,9 @@ enum Commands {
         /// URL for remote ADB authentication
         #[clap(short = 'a', long = "remote-auth-url")]
         remote_auth_url: Option<String>,
+
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        variables: Vec<String>,
     },
     Uninstall {
         #[arg(long, value_delimiter = ',')]
@@ -86,8 +90,11 @@ async fn main() -> Result<()> {
             config,
             config_url,
             remote_auth_url,
+            variables,
         } => {
-            let config = match (config, config_url) {
+            let variable_overrides = parse_variable_overrides(&variables)?;
+
+            let mut config = match (config, config_url) {
                 (None, None) => ConfigLoader::load_builtin("penumbra"),
                 (None, Some(config_url)) => ConfigLoader::load_from_url(&config_url).await,
                 (Some(config_path), None) => ConfigLoader::load_from_file(&config_path).await,
@@ -97,12 +104,14 @@ async fn main() -> Result<()> {
                     ));
                 }
             }?;
+            let resolved_vars = config.resolve_variables(&variable_overrides)?;
+            config.apply_variables(&resolved_vars)?;
             let mut engine = if let Some(ref cache_path) = cache_dir {
                 InstallationEngine::new_with_cache(
                     config,
                     cache_path.clone(),
                     cli.github_token.clone(),
-                    remote_auth_url,
+                    remote_auth_url.clone(),
                     None,
                 )
                 .await?
@@ -110,17 +119,13 @@ async fn main() -> Result<()> {
                 InstallationEngine::new_with_token(
                     config,
                     cli.github_token.clone(),
-                    remote_auth_url,
+                    remote_auth_url.clone(),
                     None,
                 )
                 .await?
             };
 
-            if cache_dir.is_some() {
-                engine.install(repos, true).await?;
-            } else {
-                engine.install(repos, false).await?;
-            }
+            engine.install(repos, cache_dir.is_some()).await?;
         }
 
         Commands::Uninstall {
@@ -204,4 +209,59 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+fn parse_variable_overrides(tokens: &[String]) -> Result<HashMap<String, String>> {
+    let mut overrides = HashMap::new();
+    let mut pending_name: Option<String> = None;
+
+    for token in tokens {
+        if let Some(name) = pending_name.take() {
+            // We previously saw a flag, this token is the value
+            if token.starts_with("--") {
+                return Err(InstallerError::CLI(format!(
+                    "Variable flag '--{name}' missing value. Followed by '{token}'"
+                )));
+            }
+
+            overrides.insert(name, token.clone());
+            continue;
+        }
+
+        if token == "--" {
+            // Ignore explicit separators
+            continue;
+        }
+
+        if let Some(stripped) = token.strip_prefix("--") {
+            if stripped.is_empty() {
+                return Err(InstallerError::CLI("Variable flag cannot be empty".into()));
+            }
+
+            if let Some((name, value)) = stripped.split_once('=') {
+                if name.trim().is_empty() {
+                    return Err(InstallerError::CLI(
+                        "Variable flag name cannot be empty".into(),
+                    ));
+                }
+                overrides.insert(name.trim().to_string(), value.to_string());
+            } else {
+                pending_name = Some(stripped.to_string());
+            }
+        } else {
+            return Err(InstallerError::CLI(format!(
+                "Unexpected variable token '{}'. Variable flags must start with '--'",
+                token
+            )));
+        }
+    }
+
+    if let Some(name) = pending_name {
+        return Err(InstallerError::CLI(format!(
+            "Variable flag '--{}' requires a value",
+            name
+        )));
+    }
+
+    Ok(overrides)
 }
