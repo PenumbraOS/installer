@@ -20,7 +20,7 @@ installer uninstall
 installer install --repos pinitd,mabl
 
 # Install from local download cache
-installer install --cache_dir cache
+installer install --cache-dir cache
 
 # Install using a GitHub PAT for downloads
 installer install --github-token [SOME_PAT]
@@ -29,7 +29,7 @@ installer install --github-token [SOME_PAT]
 installer install --remote-auth-url [SOME_SIGNING_URL]
 
 # Download to local cache
-installer download --cache_dir cache
+installer download --cache-dir cache
 
 # Dump current logs to file
 installer dump-logs

@@ -181,10 +181,7 @@ impl InstallationEngine {
             let repo_temp_dir = self.temp_dir.join(&repo.name);
 
             if !repo_temp_dir.exists() {
-                return Err(InstallerError::Config(format!(
-                    "No cached assets found for repository '{}'. Run 'penumbra download' first.",
-                    repo.name
-                )));
+                self.download_repository_assets(repo).await?;
             }
         } else {
             self.download_repository_assets(repo).await?;
