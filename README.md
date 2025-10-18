@@ -13,6 +13,9 @@ Installer for PenumbraOS on Humane Ai Pin.
 # Install all PenumbraOS components
 installer install --llm-api-url [URL] --llm-api-key [API KEY] --llm-api-model-name [NAME]
 
+#Adds user provided systemPrompt to .json
+Installer install --system-prompt 
+
 # Uninstall all PenumbraOS components
 installer uninstall
 
