@@ -10,9 +10,7 @@ variables:
   - name: "llm-api-model-name"
     description: "API model name for OpenAI compatible API"
     required: true
-  - name: "system-prompt"
-    description: "System prompt for sending to model"
-    required: false
+
 
 # Optional: Run once before any repository installation
 global_setup:
