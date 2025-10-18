@@ -148,7 +148,7 @@ repositories:
 
       - type: "CreateConfig"
         path: "/sdcard/penumbra/etc/mabl/llm_configs.json"
-           content: |
+        content: |
           {
             "configs": [
               {
