@@ -148,21 +148,6 @@ repositories:
 
       - type: "CreateConfig"
         path: "/sdcard/penumbra/etc/mabl/llm_configs.json"
-        only_if_missing: false
-        if system-prompt:
-        content: |
-          {
-            "configs": [
-              {
-                "name": "{{llm-api-model-name}}",
-                "apiKey": "{{llm-api-key}}",
-                "model": "{{llm-api-model-name}}",
-                "baseUrl": "{{llm-api-url}}",
-                "systemPrompt": "{{system-prompt}}"
-              }
-            ]
-          }
-          else:
            content: |
           {
             "configs": [
