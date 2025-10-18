@@ -10,6 +10,9 @@ variables:
   - name: "llm-api-model-name"
     description: "API model name for OpenAI compatible API"
     required: true
+  - name: "system-prompt"
+    description: "System prompt for sending to model"
+    required: false
 
 # Optional: Run once before any repository installation
 global_setup:
@@ -148,7 +151,21 @@ repositories:
       - type: "CreateConfig"
         path: "/sdcard/penumbra/etc/mabl/llm_configs.json"
         only_if_missing: false
+        if system-prompt:
         content: |
+          {
+            "configs": [
+              {
+                "name": "{{llm-api-model-name}}",
+                "apiKey": "{{llm-api-key}}",
+                "model": "{{llm-api-model-name}}",
+                "baseUrl": "{{llm-api-url}}",
+                "systemPrompt": "{{system-prompt}}"
+              }
+            ]
+          }
+          else:
+           content: |
           {
             "configs": [
               {
