@@ -11,6 +11,7 @@ variables:
     description: "API model name for OpenAI compatible API"
     required: true
 
+
 # Optional: Run once before any repository installation
 global_setup:
   - type: "RunCommand"
@@ -147,7 +148,6 @@ repositories:
 
       - type: "CreateConfig"
         path: "/sdcard/penumbra/etc/mabl/llm_configs.json"
-        only_if_missing: true
         content: |
           {
             "configs": [
