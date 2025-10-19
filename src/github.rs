@@ -1,5 +1,5 @@
 use log::{info, warn};
-use reqwest::Client;
+use reqwest::{Client, Response};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use tokio::fs;
@@ -70,16 +70,13 @@ impl GitHubClient {
 
         let response = request.send().await?;
 
-        if !response.status().is_success() {
-            return Err(InstallerError::GitHub(format!(
-                "Failed to fetch '{repo}' releases using auth {}: HTTP {}, body: {:?}",
-                self.auth_header.is_some(),
-                response.status(),
-                response.text().await
-            )));
-        }
+        let json = validate_response(
+            response,
+            &format!("fetch '{repo}' releases"),
+            self.auth_header.is_some(),
+        )
+        .await?;
 
-        let json: Value = response.json().await?;
         let releases = json
             .as_array()
             .ok_or_else(|| InstallerError::GitHub("Expected array of releases".to_string()))?;
@@ -192,15 +189,14 @@ impl GitHubClient {
         }
 
         let response = request.send().await?;
-        if !response.status().is_success() {
-            return Err(InstallerError::GitHub(format!(
-                "Failed to list directory contents: HTTP {}",
-                response.status()
-            )));
-        }
+        let json = validate_response(
+            response,
+            &format!("list contents of '{repo}'"),
+            self.auth_header.is_some(),
+        )
+        .await?;
 
-        let contents: Value = response.json().await?;
-        let files = contents
+        let files = json
             .as_array()
             .ok_or_else(|| InstallerError::GitHub("Expected array of files".to_string()))?;
 
@@ -251,15 +247,12 @@ impl GitHubClient {
         }
 
         let response = request.send().await?;
-
-        if !response.status().is_success() {
-            return Err(InstallerError::GitHub(format!(
-                "Failed to fetch release: HTTP {}",
-                response.status()
-            )));
-        }
-
-        let json: Value = response.json().await?;
+        let json = validate_response(
+            response,
+            &format!("fetch '{repo}'"),
+            self.auth_header.is_some(),
+        )
+        .await?;
 
         let assets = json["assets"]
             .as_array()
@@ -321,5 +314,27 @@ impl GitHubClient {
 impl Default for GitHubClient {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+async fn validate_response(response: Response, action: &str, has_auth: bool) -> Result<Value> {
+    if !response.status().is_success() {
+        let auth_message = if has_auth {
+            "using auth"
+        } else {
+            "without auth"
+        };
+
+        let status_code = response.status();
+
+        let json: std::result::Result<Value, reqwest::Error> = response.json().await;
+
+        Err(InstallerError::GitHub(format!(
+            "Failed to {action} {auth_message}: HTTP {status_code}, body: {json:?}",
+        )))
+    } else {
+        let json: Value = response.json().await?;
+
+        Ok(json)
     }
 }
