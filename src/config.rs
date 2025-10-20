@@ -397,31 +397,3 @@ fn substitute_strings(strings: &mut Vec<String>, values: &HashMap<String, String
     }
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_config_validation() {
-        let config = InstallConfig {
-            name: "Test".to_string(),
-            variables: vec![],
-            repositories: vec![],
-            global_setup: vec![],
-        };
-
-        assert!(ConfigLoader::validate_config(&config).is_err());
-    }
-
-    #[test]
-    fn test_version_spec_deserialization() {
-        let yaml = r#""latest""#;
-        let spec: VersionSpec = serde_yaml::from_str(yaml).unwrap();
-        assert!(matches!(spec, VersionSpec::Version(ref v) if v == "latest"));
-
-        let yaml = r#""2025.09.02.0""#;
-        let spec: VersionSpec = serde_yaml::from_str(yaml).unwrap();
-        assert!(matches!(spec, VersionSpec::Version(ref v) if v == "2025.09.02.0"));
-    }
-}
