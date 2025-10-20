@@ -74,16 +74,7 @@ impl InstallationEngine {
             }
         }
 
-        let repos_to_install: Vec<_> = if let Some(filter) = repo_filter {
-            self.config
-                .filter_repositories(&filter)?
-                .into_iter()
-                .cloned()
-                .collect()
-        } else {
-            self.config.repositories.clone()
-        };
-
+        let repos_to_install = self.config.filter_repositories(repo_filter)?;
         if repos_to_install.is_empty() {
             return Err(InstallerError::NoRepositoriesFound);
         }
@@ -123,16 +114,7 @@ impl InstallationEngine {
     pub async fn uninstall(&mut self, repo_filter: Option<Vec<String>>) -> Result<()> {
         info!("Starting {} uninstall", self.config.name);
 
-        let repos_to_uninstall: Vec<_> = if let Some(filter) = repo_filter {
-            self.config
-                .filter_repositories(&filter)?
-                .into_iter()
-                .cloned()
-                .collect()
-        } else {
-            self.config.repositories.clone()
-        };
-
+        let repos_to_uninstall = self.config.filter_repositories(repo_filter)?;
         if repos_to_uninstall.is_empty() {
             return Err(InstallerError::NoRepositoriesFound);
         }
@@ -151,16 +133,7 @@ impl InstallationEngine {
     pub async fn download(&mut self, repo_filter: Option<Vec<String>>) -> Result<()> {
         info!("Starting {} asset download", self.config.name);
 
-        let repos_to_download: Vec<_> = if let Some(filter) = repo_filter {
-            self.config
-                .filter_repositories(&filter)?
-                .into_iter()
-                .cloned()
-                .collect()
-        } else {
-            self.config.repositories.clone()
-        };
-
+        let repos_to_download = self.config.filter_repositories(repo_filter)?;
         if repos_to_download.is_empty() {
             return Err(InstallerError::NoRepositoriesFound);
         }

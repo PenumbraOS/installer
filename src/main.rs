@@ -168,6 +168,9 @@ async fn main() -> Result<()> {
                 info!("  {}", repo.name);
                 info!("     Repository: {}/{}", repo.owner, repo.repo);
                 info!("     Version: {:?}", repo.version);
+                if repo.optional {
+                    info!("     Optional: true");
+                }
                 if !repo.release_assets.is_empty() {
                     info!("     Assets: {}", repo.release_assets.join(", "));
                 }

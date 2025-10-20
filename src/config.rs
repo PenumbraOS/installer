@@ -31,6 +31,10 @@ pub struct Repository {
     pub repo: String,
     pub version: VersionSpec,
 
+    /// If set, do not install this repository by default, requiring a filter to be set for it
+    #[serde(default)]
+    pub optional: bool,
+
     #[serde(default)]
     pub reboot_after_completion: bool,
 
@@ -259,18 +263,27 @@ impl InstallConfig {
         self.repositories.iter().find(|r| r.name == name)
     }
 
-    pub fn filter_repositories(&self, names: &[String]) -> Result<Vec<&Repository>> {
+    pub fn filter_repositories(&self, filter: Option<Vec<String>>) -> Result<Vec<Repository>> {
         let mut filtered = Vec::new();
 
-        for name in names {
-            if let Some(repo) = self.get_repository(&name) {
-                filtered.push(repo);
-            } else {
-                return Err(InstallerError::RepositoryNotFound { repo: name.clone() });
+        if let Some(filter) = filter {
+            for name in filter {
+                if let Some(repo) = self.get_repository(&name) {
+                    filtered.push(repo);
+                } else {
+                    return Err(InstallerError::RepositoryNotFound { repo: name.clone() });
+                }
             }
-        }
 
-        Ok(filtered)
+            Ok(filtered.into_iter().cloned().collect())
+        } else {
+            Ok(self
+                .repositories
+                .iter()
+                .filter(|repo| !repo.optional)
+                .cloned()
+                .collect())
+        }
     }
 }
 
