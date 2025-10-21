@@ -6,8 +6,6 @@ use std::path::Path;
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct InstallConfig {
     pub name: String,
-    #[serde(default)]
-    pub variables: Vec<ConfigVariable>,
     pub repositories: Vec<Repository>,
     #[serde(default)]
     pub global_setup: Vec<InstallStep>,
@@ -30,6 +28,9 @@ pub struct Repository {
     pub owner: String,
     pub repo: String,
     pub version: VersionSpec,
+
+    #[serde(default)]
+    pub variables: Vec<ConfigVariable>,
 
     /// If set, do not install this repository by default, requiring a filter to be set for it
     #[serde(default)]
@@ -161,15 +162,6 @@ impl ConfigLoader {
     }
 
     fn validate_config(config: &InstallConfig) -> Result<()> {
-        for variable in &config.variables {
-            if !variable.required && variable.default.is_none() {
-                return Err(InstallerError::Config(format!(
-                    "Optional variable '{}' must define a default value",
-                    variable.name
-                )));
-            }
-        }
-
         if config.repositories.is_empty() {
             return Err(InstallerError::Config(
                 "Configuration must have at least one repository".to_string(),
@@ -198,6 +190,15 @@ impl ConfigLoader {
                     repo.name
                 )));
             }
+
+            for variable in &repo.variables {
+                if !variable.required && variable.default.is_none() {
+                    return Err(InstallerError::Config(format!(
+                        "Optional variable '{}' in repository '{}' must define a default value",
+                        variable.name, repo.name
+                    )));
+                }
+            }
         }
 
         Ok(())
@@ -205,14 +206,30 @@ impl ConfigLoader {
 }
 
 impl InstallConfig {
-    pub fn resolve_variables(
+    pub fn resolve_and_apply_variables(
+        &mut self,
+        active_repos: &Vec<Repository>,
+        variable_overrides: &HashMap<String, String>,
+    ) -> Result<()> {
+        let variables = self.resolve_variables(active_repos, variable_overrides)?;
+        self.apply_variables(&variables)?;
+
+        Ok(())
+    }
+
+    fn resolve_variables(
         &self,
+        active_repos: &Vec<Repository>,
         overrides: &HashMap<String, String>,
-    ) -> Result<HashMap<String, String>> {
+    ) -> Result<HashMap<String, HashMap<String, String>>> {
         let mut resolved = HashMap::new();
 
         for key in overrides.keys() {
-            if !self.variables.iter().any(|var| &var.name == key) {
+            if !active_repos
+                .iter()
+                .flat_map(|r| r.variables.clone())
+                .any(|var| &var.name == key)
+            {
                 return Err(InstallerError::Config(format!(
                     "Unknown variable override '{}'",
                     key
@@ -220,23 +237,28 @@ impl InstallConfig {
             }
         }
 
-        for variable in &self.variables {
-            let mut value = variable.default.clone();
+        for repository in active_repos {
+            for variable in &repository.variables {
+                let mut value = variable.default.clone();
 
-            if let Some(override_value) = overrides.get(&variable.name) {
-                value = Some(override_value.clone());
-            }
-
-            match value {
-                Some(v) => {
-                    resolved.insert(variable.name.clone(), v);
+                if let Some(override_value) = overrides.get(&variable.name) {
+                    value = Some(override_value.clone());
                 }
-                None => {
-                    if variable.required {
-                        return Err(InstallerError::Config(format!(
-                            "Missing value for required variable '{}'",
-                            variable.name
-                        )));
+
+                match value {
+                    Some(v) => {
+                        let entry = resolved
+                            .entry(repository.name.clone())
+                            .or_insert_with(HashMap::new);
+                        entry.insert(variable.name.clone(), v);
+                    }
+                    None => {
+                        if variable.required {
+                            return Err(InstallerError::Config(format!(
+                                "Missing value for required variable '{}'",
+                                variable.name
+                            )));
+                        }
                     }
                 }
             }
@@ -245,16 +267,21 @@ impl InstallConfig {
         Ok(resolved)
     }
 
-    pub fn apply_variables(&mut self, values: &HashMap<String, String>) -> Result<()> {
-        substitute_string(&mut self.name, values)?;
+    pub fn apply_variables(
+        &mut self,
+        values: &HashMap<String, HashMap<String, String>>,
+    ) -> Result<()> {
+        // substitute_string(&mut self.name, values)?;
 
         for repo in &mut self.repositories {
-            substitute_repository(repo, values)?;
+            if let Some(repo_substitutions) = values.get(&repo.name) {
+                substitute_repository(repo, repo_substitutions)?;
+            }
         }
 
-        for step in &mut self.global_setup {
-            substitute_install_step(step, values)?;
-        }
+        // for step in &mut self.global_setup {
+        //     substitute_install_step(step, values)?;
+        // }
 
         Ok(())
     }

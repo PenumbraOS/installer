@@ -104,8 +104,10 @@ async fn main() -> Result<()> {
                     ));
                 }
             }?;
-            let resolved_vars = config.resolve_variables(&variable_overrides)?;
-            config.apply_variables(&resolved_vars)?;
+
+            let active_repos = config.filter_repositories(repos)?;
+            config.resolve_and_apply_variables(&active_repos, &variable_overrides)?;
+
             let mut engine = if let Some(ref cache_path) = cache_dir {
                 InstallationEngine::new_with_cache(
                     config,
@@ -125,7 +127,7 @@ async fn main() -> Result<()> {
                 .await?
             };
 
-            engine.install(repos, cache_dir.is_some()).await?;
+            engine.install(&active_repos, cache_dir.is_some()).await?;
         }
 
         Commands::Uninstall {
@@ -140,7 +142,8 @@ async fn main() -> Result<()> {
                 None,
             )
             .await?;
-            engine.uninstall(repos).await?;
+            let active_repos = engine.config.filter_repositories(repos)?;
+            engine.uninstall(&active_repos).await?;
         }
 
         Commands::Download { repos, cache_dir } => {
@@ -153,7 +156,8 @@ async fn main() -> Result<()> {
                 None,
             )
             .await?;
-            engine.download(repos).await?;
+            let active_repos = engine.config.filter_repositories(repos)?;
+            engine.download(&active_repos).await?;
         }
 
         Commands::List { config } => {

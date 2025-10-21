@@ -5,6 +5,7 @@ version = 4
 [[package]]
 name = "adb_client"
 version = "2.1.16"
+source = "git+https://github.com/PenumbraOS/adb_remote_auth#94cd9228a7f62785d24a92bd5525b36c5b916a2d"
 dependencies = [
  "base64 0.22.1",
  "bincode",

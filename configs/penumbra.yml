@@ -1,17 +1,5 @@
 name: "PenumbraOS"
 
-variables:
-  - name: "llm-api-url"
-    description: "Base URL for OpenAI compatible API"
-    required: true
-  - name: "llm-api-key"
-    description: "API key for OpenAI compatible API"
-    required: true
-  - name: "llm-api-model-name"
-    description: "API model name for OpenAI compatible API"
-    required: true
-
-
 # Optional: Run once before any repository installation
 global_setup:
   - type: "RunCommand"
@@ -115,6 +103,17 @@ repositories:
     owner: "PenumbraOS"
     repo: "mabl"
     version: "latest"
+
+    variables:
+      - name: "llm-api-url"
+        description: "Base URL for OpenAI compatible API"
+        required: true
+      - name: "llm-api-key"
+        description: "API key for OpenAI compatible API"
+        required: true
+      - name: "llm-api-model-name"
+        description: "API model name for OpenAI compatible API"
+        required: true
 
     reboot_after_completion: true
 

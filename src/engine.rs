@@ -14,7 +14,7 @@ use crate::{
 };
 
 pub struct InstallationEngine {
-    config: InstallConfig,
+    pub config: InstallConfig,
     github: GitHubClient,
     adb: AdbManager,
     temp_dir: PathBuf,
@@ -61,7 +61,7 @@ impl InstallationEngine {
 
     pub async fn install(
         &mut self,
-        repo_filter: Option<Vec<String>>,
+        active_repos: &Vec<Repository>,
         with_cache: bool,
     ) -> Result<()> {
         info!("Starting {} installation", self.config.name);
@@ -74,14 +74,13 @@ impl InstallationEngine {
             }
         }
 
-        let repos_to_install = self.config.filter_repositories(repo_filter)?;
-        if repos_to_install.is_empty() {
+        if active_repos.is_empty() {
             return Err(InstallerError::NoRepositoriesFound);
         }
 
-        info!("Installing {} repositories", repos_to_install.len());
+        info!("Installing {} repositories", active_repos.len());
 
-        for repo in &repos_to_install {
+        for repo in active_repos {
             if self.is_cancelled() {
                 break;
             }
@@ -111,17 +110,16 @@ impl InstallationEngine {
         Ok(())
     }
 
-    pub async fn uninstall(&mut self, repo_filter: Option<Vec<String>>) -> Result<()> {
+    pub async fn uninstall(&mut self, active_repos: &Vec<Repository>) -> Result<()> {
         info!("Starting {} uninstall", self.config.name);
 
-        let repos_to_uninstall = self.config.filter_repositories(repo_filter)?;
-        if repos_to_uninstall.is_empty() {
+        if active_repos.is_empty() {
             return Err(InstallerError::NoRepositoriesFound);
         }
 
-        info!("Uninstalling {} repositories", repos_to_uninstall.len());
+        info!("Uninstalling {} repositories", active_repos.len());
 
-        for repo in repos_to_uninstall.iter().rev() {
+        for repo in active_repos.iter().rev() {
             info!("Uninstalling repository: {}", repo.name);
             self.uninstall_repository(repo).await?;
         }
@@ -130,17 +128,16 @@ impl InstallationEngine {
         Ok(())
     }
 
-    pub async fn download(&mut self, repo_filter: Option<Vec<String>>) -> Result<()> {
+    pub async fn download(&mut self, active_repos: &Vec<Repository>) -> Result<()> {
         info!("Starting {} asset download", self.config.name);
 
-        let repos_to_download = self.config.filter_repositories(repo_filter)?;
-        if repos_to_download.is_empty() {
+        if active_repos.is_empty() {
             return Err(InstallerError::NoRepositoriesFound);
         }
 
-        info!("Downloading {} repositories", repos_to_download.len());
+        info!("Downloading {} repositories", active_repos.len());
 
-        for repo in &repos_to_download {
+        for repo in active_repos {
             info!("Downloading repository: {}", repo.name);
             self.download_repository(repo).await?;
         }
@@ -462,7 +459,7 @@ impl InstallationEngine {
     }
 
     fn matches_priority_pattern(&self, filename: &str, pattern: &str) -> bool {
-        if pattern.starts_with('*') && pattern.ends_with('*') {
+        if pattern.starts_with('*') && pattern.ends_with('*') && pattern.len() > 1 {
             let inner = &pattern[1..pattern.len() - 1];
             filename.to_lowercase().contains(&inner.to_lowercase())
         } else if pattern.starts_with('*') {
