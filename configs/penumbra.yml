@@ -171,3 +171,32 @@ repositories:
       - type: "RunCommand"
         command: "setprop persist.log.tag V"
         ignore_failure: true
+
+  # adbd - TCP supporting limited adbd for debugging
+  - name: "adbd"
+    owner: "PenumbraOS"
+    repo: "adbd"
+    version: "latest"
+    optional: true
+
+    reboot_after_completion: true
+
+    cleanup:
+      - type: "UninstallPackages"
+        patterns: ["com.penumbraos.adbd"]
+
+    releaseAssets: ["*.apk"]
+    repoFiles: ["config/*.unit"]
+
+    installation:
+      - type: "InstallApks"
+        priority_order: ["*"]
+
+      - type: "PushFiles"
+        files:
+          - local: "*.unit"
+            remote: "/sdcard/penumbra/etc/pinitd/system/"
+
+      # Enable the units by touching enabled/ files
+      - type: "RunCommand"
+        command: "touch /sdcard/penumbra/etc/pinitd/system/enabled/adbd_service.unit"
