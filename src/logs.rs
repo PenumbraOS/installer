@@ -1,10 +1,12 @@
 use std::fs::File;
 use std::io::{self, Write};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use tokio::runtime::Handle;
 use tokio::signal::ctrl_c;
 use tokio::sync::watch::{self, Sender};
 use tokio::task::spawn_blocking;
+use tokio::time::sleep;
 
 use crate::{AdbManager, InstallerError};
 
@@ -74,7 +76,7 @@ impl Write for PrintFileWriter {
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        todo!()
+        self.file.flush()
     }
 }
 
@@ -88,20 +90,41 @@ pub async fn dump_logcat_and_exit(stream: bool, remote_auth_url: Option<String>)
 
     let inner_filename = filename.clone();
     match tokio::spawn(async move {
-        let mut adb = AdbManager::connect(remote_auth_url).await?;
+        let mut adb = AdbManager::connect(remote_auth_url.clone()).await?;
 
         let mut file = File::create(inner_filename)?;
 
         if stream {
             let (tx, rx) = watch::channel(0);
             spawn_blocking(move || {
+                let mut adb = adb;
+
                 let mut writer = PrintFileWriter {
                     file,
                     line_count: 0,
                     tx,
                 };
 
-                let _ = adb.shell_stream("logcat", &mut writer);
+                loop {
+                    let _ = adb.shell_stream("logcat", &mut writer);
+
+                    println!("Disconnected from device. Retrying connection");
+                    let _ = writer.write_all(
+                        "Penumbra Installer - Device disconnected........................\n"
+                            .as_bytes(),
+                    );
+                    let remote_auth_url = remote_auth_url.clone();
+                    adb = Handle::current().block_on(async move {
+                        loop {
+                            let new_adb = AdbManager::connect(remote_auth_url.clone()).await;
+                            if let Ok(new_adb) = new_adb {
+                                return new_adb;
+                            }
+
+                            sleep(Duration::from_millis(500)).await;
+                        }
+                    });
+                }
             });
 
             let _ = ctrl_c().await;
