@@ -6,7 +6,7 @@ use std::path::Path;
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct InstallConfig {
     pub name: String,
-    pub repositories: Vec<Repository>,
+    repositories: Vec<Repository>,
     #[serde(default)]
     pub global_setup: Vec<InstallStep>,
 }
@@ -283,6 +283,11 @@ impl InstallConfig {
 
     pub fn get_repository(&self, name: &str) -> Option<&Repository> {
         self.repositories.iter().find(|r| r.name == name)
+    }
+
+    /// Returns all repository names in the config
+    pub fn all_repositories(&self) -> &[Repository] {
+        &self.repositories
     }
 
     pub fn filter_repositories(&self, filter: Option<Vec<String>>) -> Result<Vec<Repository>> {

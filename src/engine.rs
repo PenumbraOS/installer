@@ -96,13 +96,7 @@ impl InstallationEngine {
 
         info!("Installation complete");
 
-        if !self.is_cancelled()
-            && self
-                .config
-                .repositories
-                .iter()
-                .any(|r| r.reboot_after_completion)
-        {
+        if !self.is_cancelled() && active_repos.iter().any(|r| r.reboot_after_completion) {
             info!("Rebooting device");
             self.adb.reboot()?;
         }

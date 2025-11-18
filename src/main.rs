@@ -168,7 +168,7 @@ async fn main() -> Result<()> {
             };
 
             info!("Available repositories in '{}':", config.name);
-            for repo in &config.repositories {
+            for repo in config.all_repositories() {
                 info!("  {}", repo.name);
                 info!("     Repository: {}/{}", repo.owner, repo.repo);
                 info!("     Version: {:?}", repo.version);
