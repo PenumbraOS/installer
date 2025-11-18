@@ -105,8 +105,8 @@ async fn main() -> Result<()> {
                 }
             }?;
 
-            let active_repos = config.filter_repositories(repos)?;
-            config.resolve_and_apply_variables(&active_repos, &variable_overrides)?;
+            let mut active_repos = config.filter_repositories(repos)?;
+            config.resolve_and_apply_variables(&mut active_repos, &variable_overrides)?;
 
             let mut engine = if let Some(ref cache_path) = cache_dir {
                 InstallationEngine::new_with_cache(

@@ -208,11 +208,11 @@ impl ConfigLoader {
 impl InstallConfig {
     pub fn resolve_and_apply_variables(
         &mut self,
-        active_repos: &Vec<Repository>,
+        active_repos: &mut Vec<Repository>,
         variable_overrides: &HashMap<String, String>,
     ) -> Result<()> {
         let variables = self.resolve_variables(active_repos, variable_overrides)?;
-        self.apply_variables(&variables)?;
+        self.apply_variables_to_repos(active_repos, &variables)?;
 
         Ok(())
     }
@@ -267,21 +267,16 @@ impl InstallConfig {
         Ok(resolved)
     }
 
-    pub fn apply_variables(
+    fn apply_variables_to_repos(
         &mut self,
+        active_repos: &mut Vec<Repository>,
         values: &HashMap<String, HashMap<String, String>>,
     ) -> Result<()> {
-        // substitute_string(&mut self.name, values)?;
-
-        for repo in &mut self.repositories {
+        for repo in active_repos {
             if let Some(repo_substitutions) = values.get(&repo.name) {
                 substitute_repository(repo, repo_substitutions)?;
             }
         }
-
-        // for step in &mut self.global_setup {
-        //     substitute_install_step(step, values)?;
-        // }
 
         Ok(())
     }
