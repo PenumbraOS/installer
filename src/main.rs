@@ -1,7 +1,8 @@
 use clap::{Parser, Subcommand};
 use log::{error, info, warn};
-use std::collections::HashMap;
 use std::path::PathBuf;
+use std::time::Duration;
+use std::{collections::HashMap, thread::sleep};
 use tokio;
 
 use penumbra_installer::{
@@ -67,6 +68,11 @@ enum Commands {
         #[clap(short = 's', long = "stream")]
         stream: bool,
 
+        /// URL for remote ADB authentication
+        #[clap(short = 'a', long = "remote-auth-url")]
+        remote_auth_url: Option<String>,
+    },
+    Restart {
         /// URL for remote ADB authentication
         #[clap(short = 'a', long = "remote-auth-url")]
         remote_auth_url: Option<String>,
@@ -213,6 +219,31 @@ async fn main() -> Result<()> {
             stream,
             remote_auth_url,
         } => dump_logcat_and_exit(stream, remote_auth_url).await,
+
+        Commands::Restart { remote_auth_url } => {
+            use penumbra_installer::adb::AdbManager;
+
+            info!("Restarting device...");
+            match AdbManager::connect(remote_auth_url).await {
+                Ok(mut adb) => {
+                    for _ in 0..20 {
+                        let _ = adb
+                            .shell("settings delete global hidden_api_blacklist_exemptions")
+                            .await;
+                        sleep(Duration::from_millis(200));
+                    }
+
+                    if let Err(e) = adb.reboot() {
+                        error!("Failed to restart device: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+                Err(e) => {
+                    error!("ADB connection failed: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
     }
 
     Ok(())

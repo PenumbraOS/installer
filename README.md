@@ -7,6 +7,13 @@ Installer for PenumbraOS on Humane Ai Pin.
 
 ## Usage
 
+### Emergency Reboot/Bootloop Fix
+
+```bash
+installer restart
+installer restart --remote-auth-url [SOME_SIGNING_URL]
+```
+
 ### Basic Commands
 
 ```bash
